@@ -446,7 +446,7 @@ impl Solver {
         }
 
         match LambdaAR::run(lambda_ndf, lambda_ndf, &self.lambda_x, &self.lambda_q) {
-            Ok((f_mat, s)) => {
+            Ok((_f_mat, _s)) => {
                 // TODO fix confirmation
                 // TODO manque l'info de SV
                 for (i, index) in self.indexes.iter().enumerate() {

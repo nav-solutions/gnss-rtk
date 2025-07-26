@@ -5,9 +5,10 @@ GNSS-RTK
 [![Rust](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml/badge.svg)](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml)
 [![crates.io](https://img.shields.io/crates/v/gnss-rtk.svg)](https://crates.io/crates/gnss-rtk)
 [![crates.io](https://docs.rs/gnss-rtk/badge.svg)](https://docs.rs/gnss-rtk)
+[![crates.io](https://img.shields.io/crates/d/gnss-rtk.svg)](https://crates.io/crates/gnss-rtk)
 
 [![MRSV](https://img.shields.io/badge/MSRV-1.82.0-orange?style=for-the-badge)](https://github.com/rust-lang/rust/releases/tag/1.82.0)
-[![License](https://img.shields.io/badge/license-MPL_2.0-orange?style=for-the-badge&logo=mozilla)](https://github.com/nav-solutions/gnss-rtk/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/license-AGPLv3.0-orange?style=for-the-badge)](https://github.com/nav-solutions/gnss-rtk/blob/main/LICENSE)
 
 The `GNSS-RTK` library provides Position Velocity Time (PVT) solution solvers,
 with abstract and flexible interfaces that may apply to most navigation scenarios
@@ -18,7 +19,7 @@ are validated for each release.
 
 <div align="center">
     <p>
-        <br>Static CPP (Galileo, E1+E5b)</br>, surveying a professional geodetic marker
+        <br>Static CPP (Galileo, E1+E5b)</br> surveying a professional geodetic marker
     </p>
     <a href=https://github.com/nav-solutions/rinex-cli/blob/main/plots/front-page/map.png>
         <img src=https://github.com/nav-solutions/rinex-cli/blob/main/plots/front-page/map.png alt="Plot">
@@ -37,7 +38,7 @@ and profesionnaly calibrated position.
 
 <div align="center">
     <p>
-        <br>CPP (Galileo E1+E5b)</br>,
+        <br>CPP (Galileo E1+E5b)</br>
 pedestrian profile (no reference on the ground)
     </p>
     <a href=https://github.com/nav-solutions/rinex-cli/blob/main/plots/front-page/roaming-ppp1.png>
@@ -48,7 +49,7 @@ pedestrian profile (no reference on the ground)
 Licensing
 =========
 
-This library is released under the [Mozilla V2 Public](https://www.mozilla.org/en-US/MPL/2.0) license.
+This library is released under [AGPLv3](https://www.gnu.org/licenses/agpl-3.0.en.html).
 
 GNSS-RTK / P.V.T solutions
 ==========================
@@ -364,10 +365,8 @@ Non exhaustive list of other interesting features
 Framework
 =========
 
-GNSS-RTK includes itself within and is closely tied to the following libraries:
+`GNSS-RTK` relies on the following libraries:
 
-* [ANISE](https://github.com/nyx-space/anise) for orbital calculations
-* [Nyx-space](https://github.com/nyx-space/nyx) for advanced navigation
-* [Hifitime](https://github.com/nyx-space/hifitime) for timing
-* [Our GNSS library](https://github.com/nav-solutions/gnss) for basic GNSS definitions
-* Nalgebra for all calculations
+* Nalgebra
+* [ANISE](https://github.com/nyx-space/anise) 
+* [Hifitime](https://github.com/nyx-space/hifitime) 

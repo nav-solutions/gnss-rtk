@@ -152,22 +152,22 @@ impl Candidate {
     /// Computes phase windup correction term.
     pub(crate) fn phase_windup_correction(
         &mut self,
-        rx_state: &State,
-        r_sun: Vector3<f64>,
-        past_correction: Option<f64>,
+        _rx_state: &State,
+        _r_sun: Vector3<f64>,
+        _past_correction: Option<f64>,
     ) {
-        let sv_state = self.orbit.unwrap_or_else(|| {
-            panic!("internal error: phase windup while state is not fully resolved");
-        });
+        // let sv_state = self.orbit.unwrap_or_else(|| {
+        //     panic!("internal error: phase windup while state is not fully resolved");
+        // });
 
-        let r_sv = sv_state.to_cartesian_pos_vel() * 1.0E3;
+        // let r_sv = sv_state.to_cartesian_pos_vel() * 1.0E3;
 
-        // todo self.yaw_attitude();
+        // // todo self.yaw_attitude();
 
-        let r_rx = rx_state.to_position_ecef_m();
-        let r_sv = Vector3::new(r_sv[0], r_sv[1], r_sv[2]);
-        let r_rr_rs = r_rx - r_sv;
-        let e_r_rs = r_rr_rs.norm();
+        // let r_rx = rx_state.to_position_ecef_m();
+        // let r_sv = Vector3::new(r_sv[0], r_sv[1], r_sv[2]);
+        // let r_rr_rs = r_rx - r_sv;
+        // let e_r_rs = r_rr_rs.norm();
 
         // self.windup = 0.0; // TODO
     }
