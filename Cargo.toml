@@ -1,7 +1,7 @@
 [package]
 name = "gnss-rtk"
 version = "0.8.0-alpha"
-license = "MPL-2.0"
+license = "AGPL-3.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "GNSS position solver"
 homepage = "https://github.com/nav-solutions/gnss-rtk"
@@ -15,14 +15,10 @@ exclude = [
 ]
 
 [package.metadata]
-msrv = "1.81"
+msrv = "1.82"
 
 [features]
-default = ["embed_ephem"]
-
-# Download precise Orbit files @ build time instead of deploy time.
-# Removes required internet on first deployment ever.
-embed_ephem = ["anise/embed_ephem"]
+default = []
 
 serde = [
     "dep:serde",
@@ -35,6 +31,7 @@ rstest = "0.25"
 serde_json = "1"
 env_logger = "0.11"
 rand = { version = "0.9", features = ["small_rng"] }
+anise = { version = "0.6", features = ["embed_ephem"] }
 
 [dependencies]
 log = "0.4"

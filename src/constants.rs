@@ -18,8 +18,8 @@ pub const EARTH_EQUATORIAL_RADIUS_KM: f64 = 6378.1366;
 // /// Earth equatorial radis (meters)
 // pub const EARTH_EQUATORIAL_RADIUS_M: f64 = EARTH_EQUATORIAL_RADIUS_KM * 1.0E3;
 
-/// WGS84 Earth Frame Ellipsoid semi-major axis
-pub const EARTH_SEMI_MAJOR_AXIS_WGS84: f64 = 6378137.0_f64;
+// /// WGS84 Earth Frame Ellipsoid semi-major axis
+// pub const EARTH_SEMI_MAJOR_AXIS_WGS84: f64 = 6378137.0_f64;
 
 // /// Love degree^2 term
 // pub const LOVE_DEGREE2: f64 = 0.6078;

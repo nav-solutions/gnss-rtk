@@ -1,6 +1,9 @@
 use crate::{
     candidate::differences::Differences,
-    constants::{EARTH_GRAVITATION_MU_M3_S2, EARTH_SEMI_MAJOR_AXIS_WGS84, SPEED_OF_LIGHT_M_S},
+    constants::{
+        EARTH_GRAVITATION_MU_M3_S2, // EARTH_SEMI_MAJOR_AXIS_WGS84,
+        SPEED_OF_LIGHT_M_S,
+    },
     navigation::state::State,
     pool::Pool,
     prelude::{
@@ -124,8 +127,8 @@ impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: Spacebor
 
     /// Velocities fit
     fn post_fit_velocities(&mut self, name: &str) {
-        let mu = EARTH_GRAVITATION_MU_M3_S2;
-        let w_e = EARTH_SEMI_MAJOR_AXIS_WGS84;
+        // let mu = EARTH_GRAVITATION_MU_M3_S2;
+        // let w_e = EARTH_SEMI_MAJOR_AXIS_WGS84;
 
         for cd in self.inner.iter_mut() {
             let time_of_flight = cd.signal_time_of_flight();
