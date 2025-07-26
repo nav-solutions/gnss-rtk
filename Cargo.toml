@@ -1,7 +1,7 @@
 [package]
 name = "gnss-rtk"
 version = "0.8.0-alpha"
-license = "MPL-2.0"
+license = "AGPL-3.0"
 authors = ["Guillaume W. Bres <guillaume.bressaix@gmail.com>"]
 description = "GNSS position solver"
 homepage = "https://github.com/nav-solutions/gnss-rtk"
