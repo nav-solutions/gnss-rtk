@@ -13,42 +13,20 @@ jobs:
   build:
     name: Build 
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - name: Default build
-            opts: -r
-          - name: All Features
-            opts: --all-features
-
     steps:
     - uses: actions/checkout@v3
+
     - uses: actions-rs/toolchain@v1
       name: Install Rust
       with:
         toolchain: 1.82.0
         override: true
 
-    - name: ${{ matrix.name }} 
-      run: |
-        cargo clean && cargo update && cargo build ${{ matrix.opts }}
-   
-  tests:
-    name: Tests
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - uses: actions-rs/toolchain@v1
-      name: Install Rust
-      with:
-        toolchain: stable
-        override: true
-    - name: Install Dependencies
-      run: |
-        sudo apt-get update
-    - uses: actions-rs/cargo@v1
-      name: Test (all features)
-      with:
-        command: test
-        args: --all-features
+    - name: Build
+      run: cargo build
+    
+    - name: Build (All features)
+      run: cargo build --all-features
+
+    - name: Tests
+      run: cargo test --all-features
