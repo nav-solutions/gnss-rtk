@@ -42,30 +42,39 @@ jobs:
 
     - name: Run tests
       run: cargo test --all-features
-
-    - name: Config documentation
-      run: |
-        cargo test generate_default_preset --all-features
-        echo "Default Preset" >> $GITHUB_STEP_SUMMARY
-        echo "==============" >> $GITHUB_STEP_SUMMARY
-        python3 tools/jsonmd.py default.json >> $GITHUB_STEP_SUMMARY 
-        rm default.json
-        
+  
   publish:
-    name: Publish Library
+    name: Publish
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: ['build']
+    continue-on-error: true
     if: github.ref_type == 'tag'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@master
+
+      - name: Install stable
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+
       - name: Publish
         env:
           TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           cargo login $TOKEN
-          cargo publish
+          cargo publish --allow-dirty
+  
+  release:
+    runs-on: ubuntu-latest
+    needs: ['publish']
+    steps:
+    - name: Create Release
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: actions/create-release@v1
+      with:
+        draft: true
+        tag_name: ${{ github.ref_name }}
+        release_name: ${{ github.ref_name }}
