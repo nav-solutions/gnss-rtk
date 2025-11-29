@@ -10,7 +10,7 @@ use crate::{
     candidate::Candidate,
     cfg::Config,
     ephemeris::EphemerisSource,
-    navigation::{apriori::Apriori, solutions::PVTSolution, state::State, Navigation},
+    navigation::{Navigation, apriori::Apriori, solutions::PVTSolution, state::State},
     orbit::OrbitSource,
     pool::Pool,
     prelude::{EnvironmentalBias, Epoch, Error, Rc, SpacebornBias, UserParameters},
@@ -58,12 +58,12 @@ pub struct Solver<
 }
 
 impl<
-        EPH: EphemerisSource,
-        ORB: OrbitSource,
-        EB: EnvironmentalBias,
-        SB: SpacebornBias,
-        TIM: AbsoluteTime,
-    > Solver<EPH, ORB, EB, SB, TIM>
+    EPH: EphemerisSource,
+    ORB: OrbitSource,
+    EB: EnvironmentalBias,
+    SB: SpacebornBias,
+    TIM: AbsoluteTime,
+> Solver<EPH, ORB, EB, SB, TIM>
 {
     /// Creates a new [Solver] for either direct or differential navigation,
     /// with possible apriori knowledge.

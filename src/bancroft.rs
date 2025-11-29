@@ -134,7 +134,7 @@ impl Bancroft {
 
 #[cfg(test)]
 mod test {
-    use super::{lorentz_4_4, Bancroft};
+    use super::{Bancroft, lorentz_4_4};
     use nalgebra::Vector4;
 
     #[test]

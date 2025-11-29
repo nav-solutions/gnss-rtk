@@ -4,7 +4,7 @@ pub mod environment;
 /// Spaceborn (onboard) biases
 pub mod spaceborn;
 
-use crate::prelude::{Epoch, Vector3, SV};
+use crate::prelude::{Epoch, SV, Vector3};
 
 /// [BiasRuntime] contains everything to compute your [Bias] estimate.
 #[derive(Default, Copy, Clone)]

@@ -8,11 +8,11 @@ use nalgebra::{DMatrix, DVector, DimName, U4, U6, U8};
 use crate::{
     candidate::differences::Differences,
     navigation::{
+        Navigation,
         dop::DilutionOfPrecision,
         kalman::{Kalman, KfEstimate},
         state::State,
         sv::SVContribution,
-        Navigation,
     },
     prelude::{Candidate, Config, Duration, Epoch, Error, Frame, Method, SV},
     rtk::RTKBase,

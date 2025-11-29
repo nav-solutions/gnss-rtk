@@ -1,7 +1,7 @@
 use crate::error::Error;
 
 use nalgebra::{
-    allocator::Allocator, DMatrix, DVector, DefaultAllocator, DimName, OMatrix, OVector,
+    DMatrix, DVector, DefaultAllocator, DimName, OMatrix, OVector, allocator::Allocator,
 };
 
 #[derive(Clone)]

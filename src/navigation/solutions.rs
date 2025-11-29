@@ -1,6 +1,6 @@
 //! PVT Solution
 use crate::{
-    navigation::{sv::SVContribution, DilutionOfPrecision, State},
+    navigation::{DilutionOfPrecision, State, sv::SVContribution},
     prelude::{Epoch, TimeScale},
 };
 

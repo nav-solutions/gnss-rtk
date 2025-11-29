@@ -7,7 +7,7 @@ use crate::{
     constants::EARTH_ANGULAR_VEL_RAD,
     prelude::{
         Almanac, Candidate, Config, Duration, EnvironmentalBias, Ephemeris, EphemerisSource, Epoch,
-        Frame, Orbit, OrbitSource, Rc, SpacebornBias, SV,
+        Frame, Orbit, OrbitSource, Rc, SV, SpacebornBias,
     },
     // smoothing::Smoother,
 };

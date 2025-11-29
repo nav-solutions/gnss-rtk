@@ -10,11 +10,7 @@ impl LambdaAR {
     const MAX_SEARCH: usize = 10_000;
 
     fn signum(value: f64) -> f64 {
-        if value <= 0.0 {
-            -1.0
-        } else {
-            1.0
-        }
+        if value <= 0.0 { -1.0 } else { 1.0 }
     }
 
     fn round(value: f64) -> f64 {
@@ -282,7 +278,7 @@ mod test {
     // use crate::prelude::{Constellation, SV};
     use crate::tests::init_logger;
 
-    use nalgebra::{DMatrix, DimName, U1, U10, U6};
+    use nalgebra::{DMatrix, DimName, U1, U6, U10};
 
     #[test]
     fn gauss_transform() {

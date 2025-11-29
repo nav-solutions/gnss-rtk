@@ -1,4 +1,4 @@
-use nalgebra::{DimName, Matrix6, OMatrix, Vector6, U3, U6};
+use nalgebra::{DimName, Matrix6, OMatrix, U3, U6, Vector6};
 
 use crate::{
     error::Error,

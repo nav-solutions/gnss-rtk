@@ -8,7 +8,7 @@ use crate::{
     bias::spaceborn::SatelliteClockCorrection,
     constants::SPEED_OF_LIGHT_M_S,
     navigation::state::State,
-    prelude::{Almanac, Config, Duration, Epoch, Error, Orbit, Vector3, SV},
+    prelude::{Almanac, Config, Duration, Epoch, Error, Orbit, SV, Vector3},
 };
 
 use anise::errors::AlmanacResult;

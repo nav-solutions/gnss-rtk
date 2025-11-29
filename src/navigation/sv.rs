@@ -1,4 +1,4 @@
-use crate::prelude::{Duration, IonosphereBias, Signal, SV};
+use crate::prelude::{Duration, IonosphereBias, SV, Signal};
 
 #[cfg(feature = "serde")]
 use serde::Serialize;
