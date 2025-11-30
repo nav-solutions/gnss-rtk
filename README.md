@@ -2,7 +2,8 @@ GNSS-RTK
 ========
 
 [![Rust](https://github.com/nav-solutions/gnss-rtk/actions/workflows/rust.yml/badge.svg)](https://github.com/nav-solutions/gnss-rtk/actions/workflows/rust.yml)
-[![Rust](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml/badge.svg)](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml)
+[![Rust](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml/badge.svg)](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml)  
+
 [![crates.io](https://img.shields.io/crates/v/gnss-rtk.svg)](https://crates.io/crates/gnss-rtk)
 [![crates.io](https://docs.rs/gnss-rtk/badge.svg)](https://docs.rs/gnss-rtk)
 [![crates.io](https://img.shields.io/crates/d/gnss-rtk.svg)](https://crates.io/crates/gnss-rtk)
