@@ -69,8 +69,8 @@ impl KfEstimate {
     //     assert_eq!(p_rows, p_cols, "P is not square!");
 
     //     Self {
-    //         x: DMatrix::from_column_slice(D::USIZE, U1::USIZE, x.as_slice()),
-    //         p: DMatrix::from_column_slice(D::USIZE, D::USIZE, p.as_slice()),
+    //         x: DMatrix::from_column_slice(D::DIM, U1::DIM, x.as_slice()),
+    //         p: DMatrix::from_column_slice(D::DIM, D::DIM, p.as_slice()),
     //     }
     // }
 
@@ -89,7 +89,7 @@ impl KfEstimate {
 
         Self {
             x: DVector::from_column_slice(x.as_slice()),
-            p: DMatrix::from_column_slice(D::USIZE, D::USIZE, p.as_slice()),
+            p: DMatrix::from_column_slice(D::DIM, D::DIM, p.as_slice()),
         }
     }
 }
@@ -133,7 +133,7 @@ impl Kalman {
         let p_k = f_k * estimate.p * f_k_t + q_k;
 
         let x_k = DVector::<f64>::from_row_slice(x_k.as_slice());
-        let p_k = DMatrix::<f64>::from_column_slice(D::USIZE, D::USIZE, p_k.as_slice());
+        let p_k = DMatrix::<f64>::from_column_slice(D::DIM, D::DIM, p_k.as_slice());
 
         self.predicted = KfEstimate::new(&x_k, &p_k);
         self.initialized = true;
@@ -311,13 +311,13 @@ mod test {
 
         let kfe = KfEstimate::from_static(x, p);
 
-        for i in 0..U6::USIZE {
+        for i in 0..U6::DIM {
             let x = kfe.x[i] as usize;
             assert_eq!(x, i + 1);
 
-            for j in 0..U6::USIZE {
+            for j in 0..U6::DIM {
                 let p = kfe.p[(i, j)] as usize;
-                assert_eq!(p, i + 1 + j * U6::USIZE);
+                assert_eq!(p, i + 1 + j * U6::DIM);
             }
         }
     }

@@ -36,7 +36,7 @@ impl Default for State {
         Self {
             epoch: Default::default(),
             x_amb: Default::default(),
-            x: DVector::<f64>::zeros(U4::USIZE),
+            x: DVector::<f64>::zeros(U4::DIM),
             clock_drift_s_s: Default::default(),
             lat_long_alt_deg_deg_km: Default::default(),
         }
@@ -88,9 +88,9 @@ impl State {
         let pos_vel_m = orbit.to_cartesian_pos_vel() * 1.0E3;
         let latlongalt = orbit.latlongalt()?;
 
-        let mut x = DVector::<f64>::zeros(U4::USIZE);
+        let mut x = DVector::<f64>::zeros(U4::DIM);
 
-        for i in 0..U3::USIZE {
+        for i in 0..U3::DIM {
             x[i] = pos_vel_m[i];
         }
 
@@ -159,7 +159,7 @@ impl State {
     /// Temporal update
     pub fn postfit_update_mut(&mut self, frame: Frame, dx: &DVector<f64>) -> PhysicsResult<()> {
         // TODO: velocity
-        for i in 0..U3::USIZE {
+        for i in 0..U3::DIM {
             self.x[i] = dx[i];
         }
 
