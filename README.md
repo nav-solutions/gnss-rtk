@@ -2,10 +2,12 @@ GNSS-RTK
 ========
 
 [![Rust](https://github.com/nav-solutions/gnss-rtk/actions/workflows/rust.yml/badge.svg)](https://github.com/nav-solutions/gnss-rtk/actions/workflows/rust.yml)
-[![Rust](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml/badge.svg)](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml)
+[![Rust](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml/badge.svg)](https://github.com/nav-solutions/gnss-rtk/actions/workflows/daily.yml)  
+
 [![crates.io](https://img.shields.io/crates/v/gnss-rtk.svg)](https://crates.io/crates/gnss-rtk)
 [![crates.io](https://docs.rs/gnss-rtk/badge.svg)](https://docs.rs/gnss-rtk)
 [![crates.io](https://img.shields.io/crates/d/gnss-rtk.svg)](https://crates.io/crates/gnss-rtk)
+[![discord server](https://img.shields.io/discord/1342922474110586910?logo=discord)](https://discord.gg/EqhEBXBmJh)
 
 [![MRSV](https://img.shields.io/badge/MSRV-1.82.0-orange?style=for-the-badge)](https://github.com/rust-lang/rust/releases/tag/1.82.0)
 [![License](https://img.shields.io/badge/license-AGPLv3.0-orange?style=for-the-badge)](https://github.com/nav-solutions/gnss-rtk/blob/main/LICENSE)
