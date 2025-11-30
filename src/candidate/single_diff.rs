@@ -88,7 +88,7 @@ mod test {
     use crate::{
         constants::SPEED_OF_LIGHT_M_S,
         prelude::{Carrier, Epoch},
-        tests::{init_logger, CandidatesBuilder, E01, E03, E05},
+        tests::{CandidatesBuilder, E01, E03, E05, init_logger},
     };
 
     #[test]

@@ -1,4 +1,4 @@
-use nalgebra::{DimName, Matrix6, OMatrix, Vector6, U3, U6};
+use nalgebra::{DimName, Matrix6, OMatrix, U3, U6, Vector6};
 
 use crate::{
     error::Error,
@@ -51,7 +51,7 @@ impl PostfitKf {
         let p_0 = Matrix6::from_diagonal(&q_diag);
         let f_mat = Matrix6::identity();
 
-        let mut kalman = Kalman::new(U6::USIZE);
+        let mut kalman = Kalman::new(U6::DIM);
 
         let initial_estimate = KfEstimate::from_static(x_0, p_0);
 
@@ -59,9 +59,9 @@ impl PostfitKf {
 
         let mut w_mat = Matrix6::identity();
 
-        for i in 0..U3::USIZE {
+        for i in 0..U3::DIM {
             w_mat[(i, i)] = meas_pos_std_dev_m;
-            w_mat[(i + U3::USIZE, i + U3::USIZE)] = meas_vel_std_dev_m_s;
+            w_mat[(i + U3::DIM, i + U3::DIM)] = meas_vel_std_dev_m_s;
         }
 
         Self {

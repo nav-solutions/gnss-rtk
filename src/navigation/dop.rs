@@ -55,7 +55,7 @@ impl DilutionOfPrecision {
     pub fn new(state: &State, g_gt_inv: DMatrix<f64>) -> Self {
         let (nrows, ncols) = (g_gt_inv.nrows(), g_gt_inv.ncols());
 
-        assert!(nrows >= U3::USIZE, "incorrect (G.G)⁻¹ dimensions");
+        assert!(nrows >= U3::DIM, "incorrect (G.G)⁻¹ dimensions");
         assert_eq!(nrows, ncols, "(G.G)⁻¹ is not square");
 
         let (lat_rad, long_rad) = (
@@ -67,7 +67,7 @@ impl DilutionOfPrecision {
 
         Self {
             gdop: g_gt_inv.trace().sqrt(),
-            tdop: if nrows > U3::USIZE {
+            tdop: if nrows > U3::DIM {
                 g_gt_inv[(3, 3)].sqrt()
             } else {
                 0.0

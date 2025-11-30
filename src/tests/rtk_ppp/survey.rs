@@ -6,8 +6,8 @@ use crate::{
     navigation::apriori::Apriori,
     prelude::{Almanac, Config, Epoch, Frame, Method, Solver, UserParameters},
     tests::{
-        ephemeris::NullEph, init_logger, time::NullTime, CandidatesBuilder, OrbitsData,
-        TestEnvironment, TestSpacebornBiases, ROVER_REFERENCE_COORDS_ECEF_M,
+        CandidatesBuilder, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment,
+        TestSpacebornBiases, ephemeris::NullEph, init_logger, time::NullTime,
     },
 };
 

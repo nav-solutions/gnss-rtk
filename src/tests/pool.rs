@@ -4,8 +4,8 @@ use crate::{
     pool::Pool,
     prelude::{Almanac, Carrier, Config, Epoch, Frame, Method, TimeScale},
     tests::{
-        data::CandidatesBuilder, ephemeris::NullEph, init_logger, time::NullTime, OrbitsData,
-        TestEnvironment, TestSpacebornBiases, E01, E03, E05,
+        E01, E03, E05, OrbitsData, TestEnvironment, TestSpacebornBiases, data::CandidatesBuilder,
+        ephemeris::NullEph, init_logger, time::NullTime,
     },
 };
 

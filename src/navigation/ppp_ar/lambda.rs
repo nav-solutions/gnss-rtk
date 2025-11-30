@@ -10,11 +10,7 @@ impl LambdaAR {
     const MAX_SEARCH: usize = 10_000;
 
     fn signum(value: f64) -> f64 {
-        if value <= 0.0 {
-            -1.0
-        } else {
-            1.0
-        }
+        if value <= 0.0 { -1.0 } else { 1.0 }
     }
 
     fn round(value: f64) -> f64 {
@@ -282,16 +278,16 @@ mod test {
     // use crate::prelude::{Constellation, SV};
     use crate::tests::init_logger;
 
-    use nalgebra::{DMatrix, DimName, U1, U10, U6};
+    use nalgebra::{DMatrix, DimName, U1, U6, U10};
 
     #[test]
     fn gauss_transform() {
-        let mut l_mat = DMatrix::<f64>::identity(U6::USIZE, U6::USIZE);
+        let mut l_mat = DMatrix::<f64>::identity(U6::DIM, U6::DIM);
         let mut z_mat = l_mat.clone();
 
-        for i in 0..U6::USIZE {
-            for j in 0..U6::USIZE {
-                LambdaAR::gauss_transform(i, j, U6::USIZE, &mut l_mat, &mut z_mat);
+        for i in 0..U6::DIM {
+            for j in 0..U6::DIM {
+                LambdaAR::gauss_transform(i, j, U6::DIM, &mut l_mat, &mut z_mat);
             }
         }
     }
@@ -301,8 +297,8 @@ mod test {
         init_logger();
 
         let x = DMatrix::<f64>::from_row_slice(
-            U6::USIZE,
-            U1::USIZE,
+            U6::DIM,
+            U1::DIM,
             &[
                 1585184.171,
                 -6716599.430,
@@ -314,8 +310,8 @@ mod test {
         );
 
         let q = DMatrix::<f64>::from_row_slice(
-            U6::USIZE,
-            U6::USIZE,
+            U6::DIM,
+            U6::DIM,
             &[
                 0.227134, 0.112202, 0.112202, 0.112202, 0.112202, 0.103473, 0.112202, 0.227134,
                 0.112202, 0.112202, 0.112202, 0.103473, 0.112202, 0.112202, 0.227134, 0.112202,
@@ -326,7 +322,7 @@ mod test {
         );
 
         // let f_mat = DMatrix::<f64>::from_row_slice(
-        //     U6::USIZE,
+        //     U6::DIM,
         //     2,
         //     &[
         //         1585184.000000,
@@ -346,7 +342,7 @@ mod test {
 
         // let s_1 = DVector::<f64>::from_row_slice(&[3.507984, 3.708456]);
 
-        let ndf = U6::USIZE;
+        let ndf = U6::DIM;
         let nfixed = 8;
 
         LambdaAR::run(ndf, nfixed, &x, &q).unwrap_or_else(|e| {
@@ -359,8 +355,8 @@ mod test {
         init_logger();
 
         let a = DMatrix::<f64>::from_row_slice(
-            U10::USIZE,
-            U1::USIZE,
+            U10::DIM,
+            U1::DIM,
             &[
                 -13324172.755747,
                 -10668894.713608,
@@ -376,8 +372,8 @@ mod test {
         );
 
         let q = DMatrix::<f64>::from_row_slice(
-            U10::USIZE,
-            U10::USIZE,
+            U10::DIM,
+            U10::DIM,
             &[
                 0.446320, 0.223160, 0.223160, 0.223160, 0.223160, 0.572775, 0.286388, 0.286388,
                 0.286388, 0.286388, 0.223160, 0.446320, 0.223160, 0.223160, 0.223160, 0.286388,
@@ -410,7 +406,7 @@ mod test {
 
         // let s_2 = DVector::<f64>::from_row_slice(&[1506.435789, 1612.811795]);
 
-        let ndf = U10::USIZE;
+        let ndf = U10::DIM;
         let nfixed = 8;
 
         LambdaAR::run(ndf, nfixed, &a, &q).unwrap_or_else(|e| {

@@ -111,10 +111,10 @@ impl Navigation {
     /// ## Returns
     /// - [Navigation], [Error]
     pub fn new(cfg: &Config, frame: Frame) -> Self {
-        let q_k = DMatrix::<f64>::zeros(U4::USIZE, U4::USIZE);
-        let mut f_k = DMatrix::<f64>::zeros(U4::USIZE, U4::USIZE);
+        let q_k = DMatrix::<f64>::zeros(U4::DIM, U4::DIM);
+        let mut f_k = DMatrix::<f64>::zeros(U4::DIM, U4::DIM);
 
-        for i in 0..=U3::USIZE {
+        for i in 0..=U3::DIM {
             f_k[(i, i)] = 1.0;
         }
 
@@ -128,15 +128,15 @@ impl Navigation {
             prefit: None,
             state: Default::default(),
             sv: Vec::with_capacity(8),
-            kalman: Kalman::new(U4::USIZE),
+            kalman: Kalman::new(U4::DIM),
             y_k_vec: Vec::with_capacity(8),
             w_k_vec: Vec::with_capacity(8),
             indexes: Vec::with_capacity(8),
-            x_k: DVector::zeros(U4::USIZE),
+            x_k: DVector::zeros(U4::DIM),
             dop: DilutionOfPrecision::default(),
-            g_k: DMatrix::<f64>::zeros(U4::USIZE, U4::USIZE),
-            w_k: DMatrix::<f64>::zeros(U4::USIZE, U4::USIZE),
-            p_k: DMatrix::<f64>::zeros(U4::USIZE, U4::USIZE),
+            g_k: DMatrix::<f64>::zeros(U4::DIM, U4::DIM),
+            w_k: DMatrix::<f64>::zeros(U4::DIM, U4::DIM),
+            p_k: DMatrix::<f64>::zeros(U4::DIM, U4::DIM),
         }
     }
 
@@ -166,7 +166,7 @@ impl Navigation {
 
     /// Returns clock index
     pub(crate) fn clock_index() -> usize {
-        U4::USIZE - 1
+        U4::DIM - 1
     }
 
     /// Mutable iteration of the [Navigation] filter.
@@ -195,7 +195,7 @@ impl Navigation {
 
         let initial_state = initial_state.clone();
 
-        let mut ndf = U4::USIZE;
+        let mut ndf = U4::DIM;
 
         if uses_rtk {
             ndf -= 1;
@@ -421,11 +421,11 @@ impl Navigation {
 
         let y_len = self.indexes.len();
 
-        if y_len < U4::USIZE {
+        if y_len < U4::DIM {
             return Err(Error::MatrixMinimalDimension);
         }
 
-        let mut ndf = U4::USIZE;
+        let mut ndf = U4::DIM;
 
         if uses_rtk {
             ndf -= 1;
@@ -686,7 +686,7 @@ impl Navigation {
 
         let y_len = self.y_k_vec.len();
 
-        if y_len < U4::USIZE {
+        if y_len < U4::DIM {
             return Err(Error::MatrixMinimalDimension);
         }
 
@@ -695,7 +695,7 @@ impl Navigation {
 
         self.w_k.resize_mut(y_len, y_len, 0.0);
 
-        let mut ndf = U4::USIZE;
+        let mut ndf = U4::DIM;
 
         if uses_rtk {
             ndf -= 1;

@@ -35,11 +35,11 @@ mod tests;
 pub mod prelude {
     pub use crate::{
         bias::{
+            BiasRuntime,
             environment::{
                 EnvironmentalBias, IonosphereBias, IonosphereModel, KbModel, TroposphereModel,
             },
             spaceborn::{SatelliteClockCorrection, SpacebornBias},
-            BiasRuntime,
         },
         candidate::{Candidate, Observation},
         carrier::{Carrier, Signal},

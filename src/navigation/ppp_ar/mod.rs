@@ -8,11 +8,11 @@ use nalgebra::{DMatrix, DVector, DimName, U4, U6, U8};
 use crate::{
     candidate::differences::Differences,
     navigation::{
+        Navigation,
         dop::DilutionOfPrecision,
         kalman::{Kalman, KfEstimate},
         state::State,
         sv::SVContribution,
-        Navigation,
     },
     prelude::{Candidate, Config, Duration, Epoch, Error, Frame, Method, SV},
     rtk::RTKBase,
@@ -91,11 +91,11 @@ impl Solver {
     /// - cfg: [Config] preset
     /// - frame: [Frame]
     pub fn new(cfg: Config, frame: Frame) -> Self {
-        let q_k = DMatrix::<f64>::zeros(U8::USIZE, U8::USIZE);
-        let f_k = DMatrix::<f64>::identity(U8::USIZE, U8::USIZE);
-        let g_k = DMatrix::<f64>::zeros(U8::USIZE, U8::USIZE);
-        let w_k = DMatrix::<f64>::zeros(U8::USIZE, U8::USIZE);
-        let p_k = DMatrix::<f64>::zeros(U8::USIZE, U8::USIZE);
+        let q_k = DMatrix::<f64>::zeros(U8::DIM, U8::DIM);
+        let f_k = DMatrix::<f64>::identity(U8::DIM, U8::DIM);
+        let g_k = DMatrix::<f64>::zeros(U8::DIM, U8::DIM);
+        let w_k = DMatrix::<f64>::zeros(U8::DIM, U8::DIM);
+        let p_k = DMatrix::<f64>::zeros(U8::DIM, U8::DIM);
 
         Self {
             f_k,
@@ -108,14 +108,14 @@ impl Solver {
             prev_epoch: None,
             state: Default::default(),
             sv: Vec::with_capacity(8),
-            kalman: Kalman::new(U8::USIZE),
+            kalman: Kalman::new(U8::DIM),
             y_k_vec: Vec::with_capacity(8),
             w_k_vec: Vec::with_capacity(8),
             indexes: Vec::with_capacity(8),
             fixed_amb: Default::default(),
-            lambda_x: DMatrix::zeros(1, U4::USIZE),
-            lambda_q: DMatrix::zeros(U4::USIZE, U4::USIZE),
-            x_k: DVector::zeros(U8::USIZE),
+            lambda_x: DMatrix::zeros(1, U4::DIM),
+            lambda_q: DMatrix::zeros(U4::DIM, U4::DIM),
+            x_k: DVector::zeros(U8::DIM),
             dop: DilutionOfPrecision::default(),
         }
     }
@@ -155,7 +155,7 @@ impl Solver {
 
         let initial_state = initial_state.clone();
 
-        let mut ndf = U4::USIZE + double_differences.ndf();
+        let mut ndf = U4::DIM + double_differences.ndf();
         ndf -= 1; // TODO: only in RTK
 
         self.state.resize_mut(ndf);
@@ -262,7 +262,7 @@ impl Solver {
 
         let y_len = self.y_k_vec.len();
 
-        if y_len < U8::USIZE {
+        if y_len < U8::DIM {
             return Err(Error::MatrixMinimalDimension);
         }
 
@@ -282,7 +282,7 @@ impl Solver {
             debug!("(ppp i={ith}) Y: {y_k}");
 
             // Build G
-            let mut ndf = U4::USIZE;
+            let mut ndf = U4::DIM;
             ndf -= 1; // TODO: only in RTK
 
             let lambda_ndf = self.indexes.len();
@@ -399,7 +399,7 @@ impl Solver {
 
         let initial_estimate = KfEstimate::new(&self.x_k, &self.p_k);
 
-        let mut ndf = U4::USIZE;
+        let mut ndf = U4::DIM;
         ndf -= 1; // TODO: only in RTK
 
         let lambda_ndf = self.indexes.len();
@@ -434,7 +434,7 @@ impl Solver {
         self.lambda_x.resize_mut(lambda_ndf, 1, 0.0);
         self.lambda_q.resize_mut(lambda_ndf, lambda_ndf, 0.0);
 
-        let mut offset = U4::USIZE;
+        let mut offset = U4::DIM;
         offset -= 1; // TODO: only in RTK
 
         for i in 0..lambda_ndf {
@@ -521,7 +521,7 @@ impl Solver {
 
         let y_len = self.y_k_vec.len();
 
-        if y_len < U8::USIZE {
+        if y_len < U8::DIM {
             return Err(Error::MatrixMinimalDimension);
         }
 
@@ -530,7 +530,7 @@ impl Solver {
 
         self.w_k.resize_mut(y_len, y_len, 0.0);
 
-        let mut ndf = U4::USIZE;
+        let mut ndf = U4::DIM;
         ndf -= 1; // TODO: only in RTK
 
         let lambda_ndf = self.indexes.len();
@@ -589,7 +589,7 @@ impl Solver {
 
         let ndf = estimate.x.nrows();
 
-        let lambda_ndf = ndf - U6::USIZE; // TODO
+        let lambda_ndf = ndf - U6::DIM; // TODO
 
         for i in 0..ndf {
             self.x_k[i] = estimate.x[i];
