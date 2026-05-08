@@ -55,9 +55,9 @@ impl UserProfile {
         match self {
             Self::Static => 1.0,
             Self::Pedestrian => 2.0,
-            Self::Car => 4.0,
-            Self::Airplane => 2_500.0,
-            Self::Rocket => 1_000_000.0,
+            Self::Car => 10.0,
+            Self::Airplane => 100.0,
+            Self::Rocket => 1_000.0,
         }
     }
 }
@@ -140,10 +140,10 @@ impl ClockProfile {
     /// Returns bias PSD for this [ClockProfile].
     pub(crate) const fn bias_psd(&self) -> f64 {
         match self {
-            Self::Quartz => 0.5 * 2.0E-19,
-            Self::Oscillator => 0.5 * 2.0E-20,
-            Self::Atomic => 0.5 * 2.0E-21,
-            Self::HydrogenMaser => 0.5 * 2.0E-22,
+            Self::Quartz => 0.5 * 2.0 * 2.0E-19,
+            Self::Oscillator => 0.5 * 8.0 * 2.0E-20,
+            Self::Atomic => 0.5 * 2.0 * 2.0E-20,
+            Self::HydrogenMaser => 0.5 * 2.0E-20,
         }
     }
 
@@ -151,9 +151,9 @@ impl ClockProfile {
     pub(crate) const fn drift_psd(&self) -> f64 {
         match self {
             Self::Quartz => 2.0 * PI * PI * 2.0E-20,
-            Self::Oscillator => 2.0 * PI * PI * 2.0E-23,
-            Self::Atomic => 2.0 * PI * PI * 2.0E-24,
-            Self::HydrogenMaser => 2.0 * PI * PI * 2.0E-25,
+            Self::Oscillator => 2.0 * PI * PI * 4.0 * 2.0E-23,
+            Self::Atomic => 2.0 * PI * PI * 4.0 * 2.0E-29,
+            Self::HydrogenMaser => 2.0 * PI * PI * 4.0 * 2.0E-29,
         }
     }
 }
@@ -216,20 +216,20 @@ impl UserParameters {
         let dt_s3 = dt_s.powi(3);
 
         for i in 0..=2 {
-            // if is_init {
-            q_mat[(i, i)] = 1.0;
-            // } else {
-            // q_mat[(i, i)] = self.accel_psd * dt_s3 / 3.0;
-            // }
+            q_mat[(i, i)] = self.accel_psd;
+
+            if self.accel_psd != 1.0 {
+                q_mat[(i, i)] *= dt_s3 / 3.0;
+            }
         }
 
         if ndf > 3 {
-            if dt == Duration::ZERO {
-                q_mat[(3, 3)] = (100.0e-3 * SPEED_OF_LIGHT_M_S).powi(2);
-            } else {
-                q_mat[(3, 3)] = SPEED_OF_LIGHT_M_S.powi(2)
-                    * (self.clock_psd * dt_s + self.clock_drift_psd * dt_s3 / 3.0);
-            }
+            // if dt == Duration::ZERO {
+            //    q_mat[(3, 3)] = (100.0e-3 * SPEED_OF_LIGHT_M_S).powi(2);
+            //} else {
+            q_mat[(3, 3)] = SPEED_OF_LIGHT_M_S.powi(2)
+                * (self.clock_psd * dt_s + self.clock_drift_psd * dt_s3 / 3.0);
+            //}
         }
     }
 }
