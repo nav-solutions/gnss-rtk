@@ -38,6 +38,7 @@ nalgebra = "0.34"
 itertools = "0.14"
 polyfit-rs = "0.2"
 anise = "0.10"
+hyperdual = "=1.4.0" # encore et tjrs problème nyx
 num-traits = "0.2"
 hifitime = { version = "4", features = ["serde", "std"] }
 serde = { version = "1", optional = true, default-features = false, features = ["derive"] }
