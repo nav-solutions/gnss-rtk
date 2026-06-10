@@ -34,7 +34,7 @@ features = ["std", "domes", "cospar", "sbas"]
 [dependencies]
 log = "0.4"
 thiserror = "2"
-nalgebra = "0.34"
+nalgebra = "0.35"
 itertools = "0.14"
 polyfit-rs = "0.2"
 anise = "0.10"
