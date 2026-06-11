@@ -9,7 +9,7 @@ mod solver;
 
 pub use crate::{
     carrier::Signal,
-    cfg::solver::SolverOpts,
+    cfg::solver::{SolverOpts, Weighting},
     cfg::{method::Method, modeling::Modeling},
     prelude::TimeScale,
 };

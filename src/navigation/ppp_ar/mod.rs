@@ -246,8 +246,8 @@ impl Solver {
                 Ok(vec) => {
                     self.y_k_vec.push(vec.row_1);
                     self.y_k_vec.push(vec.row_2);
-                    self.w_k_vec.push(1.0); // TODO: improve model
-                    self.w_k_vec.push(1.0); // TODO: improve model
+                    self.w_k_vec.push(vec.sigma_1.powi(2));
+                    self.w_k_vec.push(vec.sigma_2.powi(2));
                     self.indexes.push(i);
                     self.sv.push(contrib);
                 },
@@ -376,8 +376,8 @@ impl Solver {
                     Ok(vec) => {
                         self.y_k_vec.push(vec.row_1);
                         self.y_k_vec.push(vec.row_2);
-                        self.w_k_vec.push(1.0); // TODO improve model
-                        self.w_k_vec.push(1.0); // TODO improve model
+                        self.w_k_vec.push(vec.sigma_1.powi(2));
+                        self.w_k_vec.push(vec.sigma_2.powi(2));
                         true
                     },
                     Err(e) => {
@@ -506,7 +506,8 @@ impl Solver {
                 Ok(vec) => {
                     self.y_k_vec.push(vec.row_1);
                     self.y_k_vec.push(vec.row_2);
-                    self.w_k_vec.push(1.0); // TODO
+                    self.w_k_vec.push(vec.sigma_1.powi(2));
+                    self.w_k_vec.push(vec.sigma_2.powi(2));
                     self.sv.push(contrib);
                     self.indexes.push(i);
                 },
@@ -539,7 +540,7 @@ impl Solver {
         self.w_k.resize_mut(y_len, y_len, 0.0);
 
         for i in 0..y_len {
-            self.w_k[(i, i)] = 1.0; // TODO: improve model
+            self.w_k[(i, i)] = 1.0 / self.w_k_vec[i];
         }
 
         // form G

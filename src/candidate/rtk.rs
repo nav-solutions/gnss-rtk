@@ -63,6 +63,29 @@ impl Candidate {
             }
         }
 
+        // Measurement weighting, keyed off this satellite's elevation.
+        // NOTE: first-order model applied per double-difference row; it does
+        // not yet account for DD cross-correlation through the shared pivot.
+        let elevation_deg = match self.attitude() {
+            Some((elev_deg, azim_deg)) => {
+                contribution.elevation_deg = elev_deg;
+                contribution.azimuth_deg = azim_deg;
+                Some(elev_deg)
+            },
+            None => None,
+        };
+
+        if !two_rows && cfg.method == Method::PPP {
+            // row #1 carries phase in this case
+            vec.sigma_1 = cfg.solver.phase_sigma_m(elevation_deg);
+        } else {
+            vec.sigma_1 = cfg.solver.code_sigma_m(elevation_deg);
+        }
+
+        if two_rows && cfg.method == Method::PPP {
+            vec.sigma_2 = cfg.solver.phase_sigma_m(elevation_deg);
+        }
+
         Ok(vec)
     }
 
