@@ -414,7 +414,7 @@ impl Navigation {
             let vec = vec.unwrap();
 
             self.y_k_vec.push(vec.row_1);
-            self.w_k_vec.push(1.0); // TODO improve model
+            self.w_k_vec.push(vec.sigma_1.powi(2));
             self.indexes.push(i);
             self.sv.push(contrib);
         }
@@ -578,7 +578,7 @@ impl Navigation {
 
                 if let Some(vec) = vec {
                     self.y_k_vec.push(vec.row_1);
-                    self.w_k_vec.push(1.0); // TODO improve model
+                    self.w_k_vec.push(vec.sigma_1.powi(2));
                     true
                 } else {
                     false
@@ -676,7 +676,7 @@ impl Navigation {
 
             if let Some(vec) = vec {
                 self.y_k_vec.push(vec.row_1);
-                self.w_k_vec.push(1.0); // TODO improve model
+                self.w_k_vec.push(vec.sigma_1.powi(2));
                 self.indexes.push(i);
                 self.sv.push(contrib);
             } else {

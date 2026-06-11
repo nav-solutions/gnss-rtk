@@ -43,7 +43,7 @@ pub mod prelude {
         },
         candidate::{Candidate, Observation},
         carrier::{Carrier, Signal},
-        cfg::{Config, Method},
+        cfg::{Config, Method, Weighting},
         constants::SPEED_OF_LIGHT_M_S,
         ephemeris::{Ephemeris, EphemerisSource},
         error::Error,
