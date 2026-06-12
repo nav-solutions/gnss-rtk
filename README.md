@@ -89,6 +89,36 @@ GNSS-RTK is currently limited to ground navigation on planet Earth. Although it 
 make it more abstract and suitable for navigation on other planets, it is not scheduled as of today.
 If you want to this happen, feel free to open discussions.
 
+Pros & Cons
+===========
+
+Advantages:
+
+- easy to deploy with comparison to task complexity
+- high level configuration 
+    - configuration can be very minimalistic (using defaults)
+    - preset is much easier than RTKlib
+- advanced configuration 
+    - tweak any parameter, like RTKlib
+- learning material
+    - use the config script to learn and test physics
+- Single or Multi signal. Conditions can vary in time (real time compatible).
+- User application agnostic: can be real time or post processed
+    - You provide the data source, it does not have to be a text file.
+- Context switch:
+    - strategy and context may change, it is not fixed at deploy time.
+- Great timescales support and advanced timing topics
+    - express solution in any timescale
+    - navigate using any timescale
+    - supports precise timescale corrections
+
+Disadvantages:
+
+- Less advanced than RTKlib, because pure PPP is not possible yet.
+- Less feedback than RTKlib
+    - Models and/or algorithms may be less effective
+    - need more feedback and contributions to obtain final results
+
 Summary
 =======
 
