@@ -230,13 +230,10 @@ impl Navigation {
         params.q_matrix(&mut self.q_k, dt, ndf);
 
         if let Some(prefit) = &mut self.ar_prefit {
-
-            let double_diff = double_differences
-                .as_ref()
-                .unwrap_or_else(|| {
-                    // will never happen
-                    panic!("internal error: missing RTK+PPP prefit");
-                });
+            let double_diff = double_differences.as_ref().unwrap_or_else(|| {
+                // will never happen
+                panic!("internal error: missing RTK+PPP prefit");
+            });
 
             let pivot_position_ecef_m = pivot_position_ecef_m.unwrap_or_else(|| {
                 // will never happen
