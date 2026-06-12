@@ -18,12 +18,8 @@ mod number;
 mod phase_range;
 mod pool;
 mod ppp;
-// mod ppp_ar;
 mod pseudo_range;
-mod rtk2cpp;
-mod rtk_cpp;
-mod rtk_ppp;
-mod rtk_spp;
+mod rtk;
 mod spp;
 mod time;
 
