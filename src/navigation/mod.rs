@@ -218,10 +218,12 @@ impl Navigation {
             Duration::ZERO
         };
 
-        if self.cfg.method == Method::PPP {
-            // initializes a dedicated AR solver when needed
-            if self.ar_prefit.is_none() {
-                self.ar_prefit = Some(ARSolver::new(self.cfg.clone(), self.frame));
+        if !uses_rtk {
+            if self.cfg.method == Method::PPP {
+                // initializes prefit solver when needed
+                if self.ar_prefit.is_none() {
+                    self.ar_prefit = Some(ARSolver::new(self.cfg.clone(), self.frame));
+                }
             }
         }
 
