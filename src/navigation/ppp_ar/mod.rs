@@ -24,8 +24,8 @@ use std::collections::HashMap;
 mod lambda;
 use lambda::LambdaAR;
 
-/// RTK+PPP Solver
-pub struct Solver {
+/// AR Solver
+pub struct ARSolver {
     /// [Config] preset
     cfg: Config,
 
@@ -84,7 +84,7 @@ pub struct Solver {
     prev_epoch: Option<Epoch>,
 }
 
-impl Solver {
+impl ARSolver {
     /// Creates new [Solver].
     ///
     /// ## Input

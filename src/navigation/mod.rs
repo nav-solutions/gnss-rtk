@@ -25,7 +25,7 @@ use crate::{
         dop::DilutionOfPrecision,
         kalman::{Kalman, KfEstimate},
         postfit::PostfitKf,
-        ppp_ar::Solver,
+        ppp_ar::ARSolver,
         state::State,
         sv::SVContribution,
     },
@@ -36,7 +36,7 @@ use crate::{
         Epoch,
         Error,
         Frame,
-        // Method,
+        Method,
         UserParameters,
         // SV,
     },
@@ -76,7 +76,7 @@ pub(crate) struct Navigation {
     p_k: DMatrix<f64>,
 
     /// Prefit
-    prefit: Option<Solver>,
+    ar_prefit: Option<ARSolver>,
 
     /// [Kalman]
     kalman: Kalman,
@@ -125,7 +125,7 @@ impl Navigation {
             postfit: None,
             prev_epoch: None,
             cfg: cfg.clone(),
-            prefit: None,
+            ar_prefit: None,
             state: Default::default(),
             sv: Vec::with_capacity(8),
             kalman: Kalman::new(U4::DIM),
@@ -152,7 +152,7 @@ impl Navigation {
         self.clear();
         self.kalman.reset();
 
-        if let Some(prefit) = &mut self.prefit {
+        if let Some(prefit) = &mut self.ar_prefit {
             prefit.reset();
         }
 
@@ -218,20 +218,26 @@ impl Navigation {
             Duration::ZERO
         };
 
-        // if self.cfg.method == Method::PPP {
-        //     if self.prefit.is_none() {
-        //         self.prefit = Some(Solver::new(self.cfg.clone(), self.frame));
-        //     }
-        // }
+        if self.cfg.method == Method::PPP {
+            // initializes a dedicated AR solver when needed
+            if self.ar_prefit.is_none() {
+                self.ar_prefit = Some(ARSolver::new(self.cfg.clone(), self.frame));
+            }
+        }
 
         params.q_matrix(&mut self.q_k, dt, ndf);
 
-        if let Some(prefit) = &mut self.prefit {
+        if let Some(prefit) = &mut self.ar_prefit {
+
             let double_diff = double_differences
                 .as_ref()
-                .expect("internal error: missing RTK+PPP prefit");
+                .unwrap_or_else(|| {
+                    // will never happen
+                    panic!("internal error: missing RTK+PPP prefit");
+                });
 
             let pivot_position_ecef_m = pivot_position_ecef_m.unwrap_or_else(|| {
+                // will never happen
                 panic!("internal error: undefined pivot satellite position");
             });
 

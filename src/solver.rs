@@ -45,8 +45,6 @@ pub struct Solver<
     /// Base pool
     base_pool: Pool<EPH, ORB, EB, SB>,
 
-    /// PPP prefit
-
     /// [Navigation] solver
     navigation: Navigation,
 
