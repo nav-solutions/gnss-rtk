@@ -48,6 +48,11 @@ pub const MAX_RTK_CPP_Y_ERROR_M: f64 = 11.5;
 pub const MAX_RTK_CPP_Z_ERROR_M: f64 = 97.35;
 pub const MAX_RTK_CPP_GDOP: f64 = 1.99;
 
+pub const MAX_RTK_PPP_X_ERROR_M: f64 = 24.59;
+pub const MAX_RTK_PPP_Y_ERROR_M: f64 = 11.5;
+pub const MAX_RTK_PPP_Z_ERROR_M: f64 = 97.35;
+pub const MAX_RTK_PPP_GDOP: f64 = 1.99;
+
 pub const MAX_SURVEY_BANCROFT_X_ERROR_M: f64 = 35.0;
 pub const MAX_SURVEY_BANCROFT_Y_ERROR_M: f64 = 110.0;
 pub const MAX_SURVEY_BANCROFT_Z_ERROR_M: f64 = 30.0;

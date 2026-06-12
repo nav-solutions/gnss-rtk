@@ -6,7 +6,8 @@ use crate::{
     navigation::apriori::Apriori,
     prelude::{Almanac, Config, Epoch, Frame, Method, Solver, UserParameters},
     tests::{
-        CandidatesBuilder, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment,
+        CandidatesBuilder, MAX_RTK_PPP_GDOP, MAX_RTK_PPP_X_ERROR_M, MAX_RTK_PPP_Y_ERROR_M,
+        MAX_RTK_PPP_Z_ERROR_M, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment,
         TestSpacebornBiases, ephemeris::NullEph, init_logger, time::NullTime,
     },
 };
@@ -96,18 +97,23 @@ fn static_rtk_ppp() {
                 );
 
                 assert!(
-                    err_x_m < 100.0,
+                    err_x_m < MAX_RTK_PPP_X_ERROR_M,
                     "epoch={epoch_str} - x error={err_x_m}m too large"
                 );
 
                 assert!(
-                    err_y_m < 100.0,
+                    err_y_m < MAX_RTK_PPP_Y_ERROR_M,
                     "epoch={epoch_str} - y error={err_y_m}m too large"
                 );
 
                 assert!(
-                    err_z_m < 100.0,
+                    err_z_m < MAX_RTK_PPP_Z_ERROR_M,
                     "epoch={epoch_str} - z error={err_z_m}m too large"
+                );
+
+                assert!(
+                    pvt.gdop < MAX_RTK_PPP_GDOP,
+                    "{epoch_str} (static) rtk-ppp survey GDOP too large!"
                 );
 
                 info!(
