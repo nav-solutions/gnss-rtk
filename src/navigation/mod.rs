@@ -198,7 +198,7 @@ impl Navigation {
         let mut ndf = U4::DIM;
 
         if uses_rtk {
-            ndf -= 1;
+            ndf -= 1; // no TIME
         }
 
         self.state.resize_mut(ndf);
@@ -386,7 +386,6 @@ impl Navigation {
 
                 match candidates[i].rtk_vector_contribution(
                     t,
-                    false,
                     &self.cfg,
                     double_differences,
                     &mut contrib,
@@ -549,7 +548,6 @@ impl Navigation {
 
                     match candidates[*i].rtk_vector_contribution(
                         t,
-                        false,
                         &self.cfg,
                         double_differences,
                         &mut unused,
@@ -645,20 +643,8 @@ impl Navigation {
                     .as_ref()
                     .expect("internal error: invalid rtk measurement/post fit");
 
-                // let fixed_amb = if self.cfg.method == Method::PPP {
-                //     // let fixed_ambiguities = fixed_ambiguities
-                //     //     .as_ref()
-                //     //     .expect("internal error: missing PPP prefit");
-
-                //     // fixed_ambiguities.get(&candidates[i].sv)
-                //     None
-                // } else {
-                //     None
-                // };
-
                 match candidates[i].rtk_vector_contribution(
                     t,
-                    false,
                     &self.cfg,
                     double_differences,
                     &mut contrib,

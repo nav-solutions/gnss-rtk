@@ -3,7 +3,7 @@ use crate::prelude::TimeScale;
 
 use log::{debug, error};
 
-use nalgebra::{DMatrix, DVector, DimName, U4, U6, U8};
+use nalgebra::{DMatrix, DVector, DimName, U4, U6, U8, Vector3};
 
 use crate::{
     candidate::differences::Differences,
@@ -85,7 +85,7 @@ pub struct ARSolver {
 }
 
 impl ARSolver {
-    /// Creates new [Solver].
+    /// Creates new [ARSolver].
     ///
     /// ## Input
     /// - cfg: [Config] preset
@@ -137,26 +137,20 @@ impl ARSolver {
     /// - params: [UserParameters]
     /// - candidates: proposed [Candidate]s
     /// - size: number of proposed [Cadndidate]s
-    /// - rtk_base: custom [RTK] implementation
-    /// - pivot_position_ecef_m: pivot position in meters (ECEF)
     /// - double_differences: double [Differences]
-    pub fn run<RTK: RTKBase>(
+    pub fn run(
         &mut self,
         epoch: Epoch,
         params: UserParameters,
         initial_state: &State,
         candidates: &[Candidate],
         size: usize,
-        rtk_base: &RTK,
-        pivot_position_ecef_m: (f64, f64, f64),
-        double_differences: &Differences,
     ) -> Result<(), Error> {
         self.clear();
 
         let initial_state = initial_state.clone();
 
-        let mut ndf = U4::DIM + double_differences.ndf();
-        ndf -= 1; // TODO: only in RTK
+        let mut ndf = U4::DIM;
 
         self.state.resize_mut(ndf);
         self.kalman.resize_mut(ndf);
@@ -166,26 +160,9 @@ impl ARSolver {
         self.x_k.resize_vertically_mut(ndf, 0.0);
 
         if !self.kalman.initialized {
-            self.kf_initialization(
-                epoch,
-                &initial_state,
-                candidates,
-                params,
-                size,
-                rtk_base,
-                pivot_position_ecef_m,
-                double_differences,
-            )?;
+            self.kf_initialization(epoch, &initial_state, candidates, params, size)?;
         } else {
-            self.kf_run(
-                epoch,
-                candidates,
-                params,
-                size,
-                rtk_base,
-                pivot_position_ecef_m,
-                double_differences,
-            )?;
+            self.kf_run(epoch, candidates, params, size)?;
         }
 
         self.prev_epoch = Some(epoch);
@@ -209,26 +186,19 @@ impl ARSolver {
     /// - candidates: proposed [Candidate]s
     /// - params: [UserParameters]
     /// - size: number of proposed [Cadndidate]s
-    /// - rtk_base: custom [RTK] implementation
-    /// - pivot_position_ecef_m: pivot position in meters (ECEF)
-    /// - double_differences: double [Differences]
-    pub fn kf_initialization<RTK: RTKBase>(
+    pub fn kf_initialization(
         &mut self,
         epoch: Epoch,
         state: &State,
         candidates: &[Candidate],
         params: UserParameters,
         size: usize,
-        rtk_base: &RTK,
-        pivot_position_ecef_m: (f64, f64, f64),
-        double_differences: &Differences,
+        ref_position_ecef_m: Vector3<f64>,
     ) -> Result<(), Error> {
         const NB_ITER: usize = 10;
 
         let mut pending = state.clone();
         let mut dop = DilutionOfPrecision::default();
-
-        let (base_x0, base_y0, base_z0) = rtk_base.reference_position_ecef_m(epoch);
 
         // measurements
         for i in 0..size {
@@ -236,11 +206,10 @@ impl ARSolver {
 
             contrib.sv = candidates[i].sv;
 
-            match candidates[i].rtk_vector_contribution(
-                epoch,
-                true,
+            match candidates[i].ppp_vector_contribution(
                 &self.cfg,
-                double_differences,
+                true,
+                ref_position_ecef_m,
                 &mut contrib,
             ) {
                 Ok(vec) => {
@@ -282,9 +251,9 @@ impl ARSolver {
             debug!("(ppp i={ith}) Y: {y_k}");
 
             // Build G
-            let mut ndf = U4::DIM;
-            ndf -= 1; // TODO: only in RTK
+            let mut ndf = U8::DIM; // two rows
 
+            // ambiguitides DIM
             let lambda_ndf = self.indexes.len();
             ndf += lambda_ndf;
             self.state.resize_ambiguities_mut(lambda_ndf);
@@ -296,15 +265,17 @@ impl ARSolver {
                 let position_m = pending.to_position_ecef_m();
 
                 let (dx, dy, dz) =
-                    candidates[*index].rtk_matrix_contribution(position_m, pivot_position_ecef_m);
+                    candidates[*index].ppp_matrix_contribution(&self.cfg, position_m);
 
                 self.g_k[(2 * i, 0)] = dx;
                 self.g_k[(2 * i, 1)] = dy;
                 self.g_k[(2 * i, 2)] = dz;
 
+                // two rows
                 self.g_k[(2 * i + 1, 0)] = dx;
                 self.g_k[(2 * i + 1, 1)] = dy;
                 self.g_k[(2 * i + 1, 2)] = dz;
+
                 self.g_k[(2 * i + 1, 3 + i)] = 1.0;
             }
 
@@ -323,16 +294,6 @@ impl ARSolver {
             self.p_k = gt_w_g_inv.clone();
 
             let position_ecef_m = pending.to_position_ecef_m();
-
-            let (baseline_dx, baseline_dy, baseline_dz) = (
-                position_ecef_m[0] - base_x0,
-                position_ecef_m[1] - base_y0,
-                position_ecef_m[2] - base_z0,
-            );
-
-            self.x_k[0] -= baseline_dx;
-            self.x_k[1] -= baseline_dy;
-            self.x_k[2] -= baseline_dz;
 
             debug!("(ppp i={}) dx={}", ith, self.x_k);
 
@@ -366,11 +327,10 @@ impl ARSolver {
             self.indexes.retain(|i| {
                 let mut unused = SVContribution::default();
 
-                match candidates[*i].rtk_vector_contribution(
-                    epoch,
-                    true,
+                match candidates[*i].ppp_vector_contribution(
                     &self.cfg,
-                    double_differences,
+                    true,
+                    ref_position_ecef_m,
                     &mut unused,
                 ) {
                     Ok(vec) => {
@@ -473,22 +433,17 @@ impl ARSolver {
     /// - candidates: proposed [Candidate]s
     /// - params: [UserParameters]
     /// - size: number of proposed [Cadndidate]s
-    /// - rtk_base: custom [RTK] implementation
     /// - pivot_position_ecef_m: pivot position in meters (ECEF)
     /// - double_differences: double [Differences]
-    pub fn kf_run<RTK: RTKBase>(
+    pub fn kf_run(
         &mut self,
         epoch: Epoch,
         candidates: &[Candidate],
         params: UserParameters,
         size: usize,
-        rtk_base: &RTK,
         pivot_position_ecef_m: (f64, f64, f64),
-        double_differences: &Differences,
     ) -> Result<(), Error> {
         let mut pending = self.state.clone();
-
-        let (base_x0, base_y0, base_z0) = rtk_base.reference_position_ecef_m(epoch);
 
         // measurements
         for i in 0..size {
@@ -496,11 +451,10 @@ impl ARSolver {
 
             contrib.sv = candidates[i].sv;
 
-            match candidates[i].rtk_vector_contribution(
-                epoch,
-                true,
+            match candidates[i].ppp_vector_contribution(
                 &self.cfg,
-                double_differences,
+                true,
+                ref_position_ecef_m,
                 &mut contrib,
             ) {
                 Ok(vec) => {
@@ -512,7 +466,7 @@ impl ARSolver {
                 },
                 Err(e) => {
                     error!(
-                        "{}({}) - rtk measurement error: {}",
+                        "{}({}) - ppp measurement error: {}",
                         epoch, candidates[i].sv, e
                     );
                 },
@@ -530,8 +484,7 @@ impl ARSolver {
 
         self.w_k.resize_mut(y_len, y_len, 0.0);
 
-        let mut ndf = U4::DIM;
-        ndf -= 1; // TODO: only in RTK
+        let mut ndf = U8::DIM;
 
         let lambda_ndf = self.indexes.len();
 
@@ -548,8 +501,7 @@ impl ARSolver {
         for (i, index) in self.indexes.iter().enumerate() {
             let position_m = pending.to_position_ecef_m();
 
-            let (dx, dy, dz) =
-                candidates[*index].rtk_matrix_contribution(position_m, pivot_position_ecef_m);
+            let (dx, dy, dz) = candidates[*index].ppp_matrix_contribution(&self.cfg, position_m);
 
             self.g_k[(2 * i, 0)] = dx;
             self.g_k[(2 * i, 1)] = dy;
@@ -589,7 +541,8 @@ impl ARSolver {
 
         let ndf = estimate.x.nrows();
 
-        let lambda_ndf = ndf - U6::DIM; // TODO
+        // TODO: DIM
+        let lambda_ndf = ndf - U6::DIM;
 
         for i in 0..ndf {
             self.x_k[i] = estimate.x[i];
@@ -597,19 +550,7 @@ impl ARSolver {
 
         debug!("dx(ppp)={}", self.x_k);
 
-        // if uses_rtk {
         let position_ecef_m = pending.to_position_ecef_m();
-
-        let (baseline_dx, baseline_dy, baseline_dz) = (
-            position_ecef_m[0] - base_x0,
-            position_ecef_m[1] - base_y0,
-            position_ecef_m[2] - base_z0,
-        );
-
-        self.x_k[0] -= baseline_dx;
-        self.x_k[1] -= baseline_dy;
-        self.x_k[2] -= baseline_dz;
-        // }
 
         let (dx, dy, dz) = (self.x_k[0], self.x_k[1], self.x_k[2]);
 

@@ -17,6 +17,7 @@ impl Candidate {
     /// ## Input
     /// - t: [Epoch] of computation
     /// - cfg: [Config] preset
+    /// - ppp_prefit: special case
     /// - x0_y0_z0: current state (metric)
     /// - rx_lat_long_alt_ddeg_km: state as geodetic lat, long both
     /// in decimal degrees, and altitude above mean sea level (km)
@@ -26,7 +27,7 @@ impl Candidate {
     pub(crate) fn ppp_vector_contribution(
         &self,
         cfg: &Config,
-        two_rows: bool,
+        ppp_prefit: bool,
         x0_y0_z0_m: Vector3<f64>,
         contribution: &mut SVContribution,
     ) -> Result<VectorContribution, Error> {
@@ -119,11 +120,11 @@ impl Candidate {
 
         let cp = cp.map(|cp| cp - rho - bias_m);
 
-        if (two_rows || cfg.method == Method::PPP) && cp.is_none() {
+        if (ppp_prefit || cfg.method == Method::PPP) && cp.is_none() {
             return Err(Error::MissingPhaseRange)?;
         }
 
-        if two_rows {
+        if ppp_prefit {
             vec.row_1 = pr;
             vec.row_2 = cp.unwrap_or_default();
         } else if cfg.method == Method::PPP {

@@ -11,7 +11,6 @@ impl Candidate {
     pub(crate) fn rtk_vector_contribution(
         &self,
         epoch: Epoch,
-        two_rows: bool,
         cfg: &Config,
         double_diffs: &Differences,
         contribution: &mut SVContribution,
@@ -22,9 +21,10 @@ impl Candidate {
 
         let mut vec = VectorContribution::default();
 
-        // row #1
+        // assigns row #1
         match cfg.method {
             Method::SPP => {
+                // code based navigation
                 if let Some((_, code)) = dd.code {
                     vec.row_1 = code;
                 } else {
@@ -32,35 +32,24 @@ impl Candidate {
                     return Err(Error::MissingPseudoRange);
                 }
             },
-            _ => {
+            Method::CPP => {
+                // dual-freq code based navigation
                 if let Some((_, code)) = dd.code_if {
                     vec.row_1 = code;
                 } else {
-                    error!("{}({}) - missing pseudo range", epoch, self.sv);
+                    error!("{}({}) - missing code-if combination", epoch, self.sv);
                     return Err(Error::MissingPseudoRange);
                 }
             },
-        }
-
-        // row #1
-        if !two_rows && cfg.method == Method::PPP {
-            if let Some(phase_if) = dd.phase_if(self.sv) {
-                vec.row_1 = phase_if;
-            } else {
-                error!("{}({}) - missing phase data", epoch, self.sv);
-                return Err(Error::MissingPhaseRange);
-            }
-        }
-
-        // row #2 (special case)
-        if two_rows && cfg.method == Method::PPP {
-            // special case
-            if let Some((_, _, phase_if)) = dd.phase_if {
-                vec.row_2 = phase_if;
-            } else {
-                error!("{}({}) - missing phase data", epoch, self.sv);
-                return Err(Error::MissingPhaseRange);
-            }
+            Method::PPP => {
+                // phase based navigation
+                if let Some(phase_if) = dd.phase_if(self.sv) {
+                    vec.row_1 = phase_if;
+                } else {
+                    error!("{}({}) - missing phase-if combination", epoch, self.sv);
+                    return Err(Error::MissingPhaseRange);
+                }
+            },
         }
 
         Ok(vec)
