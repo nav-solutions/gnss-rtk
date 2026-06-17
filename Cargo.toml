@@ -35,7 +35,7 @@ features = ["std", "domes", "cospar", "sbas"]
 log = "0.4"
 thiserror = "2"
 nalgebra = "0.34"
-itertools = "0.14"
+itertools = "0.15"
 polyfit-rs = "0.2"
 anise = "0.10"
 hyperdual = "=1.4.0" # encore et tjrs problème nyx
