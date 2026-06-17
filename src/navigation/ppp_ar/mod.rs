@@ -6,7 +6,6 @@ use log::{debug, error};
 use nalgebra::{DMatrix, DVector, DimName, U4, U6, U8, Vector3};
 
 use crate::{
-    candidate::differences::Differences,
     navigation::{
         Navigation,
         dop::DilutionOfPrecision,
@@ -185,7 +184,7 @@ impl ARSolver {
     /// - past_state: past [State]
     /// - candidates: proposed [Candidate]s
     /// - params: [UserParameters]
-    /// - size: number of proposed [Cadndidate]s
+    /// - size: number of proposed [Candidate]s
     pub fn kf_initialization(
         &mut self,
         epoch: Epoch,
