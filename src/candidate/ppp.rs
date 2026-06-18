@@ -113,8 +113,6 @@ impl Candidate {
         bias_m += self.tropod;
         contribution.tropo_bias = Some(self.tropod);
 
-        vec.sigma = 1.0; // TODO
-
         let pr = range_m - rho - bias_m;
 
         let cp = cp.map(|cp| cp - rho - bias_m);
@@ -123,13 +121,19 @@ impl Candidate {
             return Err(Error::MissingPhaseRange)?;
         }
 
+        // Measurement weighting: row #1 is code (or phase in single-row PPP),
+        // row #2 is phase. Deviations follow the configured elevation model.
         if two_rows {
             vec.row_1 = pr;
             vec.row_2 = cp.unwrap_or_default();
+            vec.sigma_1 = cfg.solver.code_sigma_m(Some(elev_deg));
+            vec.sigma_2 = cfg.solver.phase_sigma_m(Some(elev_deg));
         } else if cfg.method == Method::PPP {
             vec.row_1 = cp.unwrap_or_default();
+            vec.sigma_1 = cfg.solver.phase_sigma_m(Some(elev_deg));
         } else {
             vec.row_1 = pr;
+            vec.sigma_1 = cfg.solver.code_sigma_m(Some(elev_deg));
         }
 
         Ok(vec)
