@@ -27,18 +27,16 @@ serde = [
 ]
 
 [dependencies.gnss-rs]
-git = "https://github.com/nav-solutions/gnss"
-rev = "83b2b9397d05a59a9d06b0ddf1fab73c7f1ab1c1"
-features = ["std", "domes", "cospar", "sbas"]
+version = "2"
+features = ["std"]
 
 [dependencies]
 log = "0.4"
 thiserror = "2"
-nalgebra = "0.34"
+nalgebra = "0.35"
 itertools = "0.15"
 polyfit-rs = "0.2"
 anise = "0.10"
-hyperdual = "=1.4.0" # encore et tjrs problème nyx
 num-traits = "0.2"
 hifitime = { version = "4", features = ["serde", "std"] }
 serde = { version = "1", optional = true, default-features = false, features = ["derive"] }
