@@ -28,7 +28,7 @@ serde = [
 
 [dependencies.gnss-rs]
 version = "2"
-features = ["std", "domes", "cospar", "sbas"]
+features = ["std"]
 
 [dependencies]
 log = "0.4"
