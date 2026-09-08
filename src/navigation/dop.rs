@@ -29,7 +29,7 @@ impl DilutionOfPrecision {
             lat_rad.cos() * lon_rad.sin(),
             0.0_f64,
             lat_rad.cos(),
-            lon_rad.sin(),
+            lat_rad.sin(),
         );
 
         let q_3 = Matrix3::<f64>::new(
