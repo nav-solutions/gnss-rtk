@@ -27,7 +27,7 @@ serde = [
 ]
 
 [dependencies.gnss-rs]
-version = "2.7"
+version = "2"
 features = ["std", "domes", "cospar", "sbas"]
 
 [dependencies]
