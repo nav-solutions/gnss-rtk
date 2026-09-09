@@ -94,30 +94,44 @@ Pros & Cons
 
 Advantages:
 
-- easy to deploy with comparison to task complexity
-- high level configuration 
-    - configuration can be very minimalistic (using defaults)
-    - preset is much easier than RTKlib
-- advanced configuration 
-    - tweak any parameter, like RTKlib
-- learning material
-    - use the config script to learn and test physics
-- Single or Multi signal. Conditions can vary in time (real time compatible).
-- User application agnostic: can be real time or post processed
-    - You provide the data source, it does not have to be a text file.
+- Easy to use & deploy, compared to task complexity
+- High level configuration 
+    - meaningful parameters, user friendly
+    - Configuration script can be kept to a minimum while obtaining
+    good performances
+    - Configuration preset is easier than RTKlib
+- Advanced configuration 
+    - Like RTKLib, it is possible to tweak any parameter here
+- Teaching material and learning experience
+    - Because the configuration preset is easy to manipulate,
+    it is easy to use it to emphasize or observe the contribution of each physical parameter
+- Single or Multi signal
+    - This solver can operate with a single or mixed signals, including
+    signal variations (real time compatible)
+    - User preference should be possible
+- User application agnostic
+    - This solver is compatible with both real-time processing and post-processing
+    - In particular, the solver can work on any data stream, as long as the user
+    fill the requirements imposed by the solver task (physics) and match the proposed interfaces.
 - Context switch:
-    - strategy and context may change, it is not fixed at deploy time.
+    - Strategy, context (input stream) or configuration preset can vary between epochs
+    and does not have to be fixed at deploy time: this solver is compatible with real-time applications
 - Great timescales support and advanced timing topics
-    - express solution in any timescale
-    - navigate using any timescale
-    - supports precise timescale corrections
+    - This solver allows to navigate in any of the supported timescales
+    - Express solution in any timescale: the solver will apply
+    the correction from the GNSS timescale to the desired timescale.
+    - Precise correction: if the user provides precise corrections, the solver will take that into account
+    either in the solving process or when converting to the desired timescale
 
 Disadvantages:
 
-- Less advanced than RTKlib, because pure PPP is not possible yet.
+- Less advanced than RTKlib
+    - Pure PPP is not possible yet, this solver is limited to RTK-PPP in case of PPP navigation.
 - Less feedback than RTKlib
     - Models and/or algorithms may be less effective
-    - need more feedback and contributions to obtain final results
+    - Need more feedback from both the community and other developpers.
+    In particular, the solver has been tested thoroughly against static applications,
+    and few pedestrian profiles. It has barely been used with roaming devices and fast targets.
 
 Summary
 =======
