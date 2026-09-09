@@ -89,6 +89,21 @@ GNSS-RTK is currently limited to ground navigation on planet Earth. Although it 
 make it more abstract and suitable for navigation on other planets, it is not scheduled as of today.
 If you want to this happen, feel free to open discussions.
 
+Reference applications
+======================
+
+List of applications that use this solver as their navigation core to obtain the P.V.T solution:
+
+- [Real-time I/Q streams (RTL-SDR) or post-processed I/Q recordings](https://github.com/mx4/gnss-rcv)
+    - Application to GPS L1 C/A
+    - Application to QZSS L1
+    - Application to Galileo E1B
+    - Currently limited to SPP strategy: single signal mono channel system
+- [RINEX-Cli (command line) hosted in this framework](https://github.com/nav-solutions/rinex-cli)
+    - RINEX (post processing) application
+    - Application to 4D P.V.T solutions solving
+    - Application to CGGTTS (timing) solutions solving
+
 Pros & Cons
 ===========
 
