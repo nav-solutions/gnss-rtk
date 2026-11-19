@@ -1,4 +1,5 @@
 use anise::{
+    almanac::metaload::{MetaAlmanac, MetaFile},
     constants::frames::EARTH_J2000,
     prelude::{Almanac, Epoch, Frame, Orbit},
 };
@@ -23,10 +24,18 @@ mod rtk;
 mod spp;
 mod time;
 
+pub mod sim;
+
 pub use data::*;
+mod almanac;
+
+pub use almanac::{almanac, earth_frame};
 
 use log::LevelFilter;
-use std::sync::Once;
+use std::{
+    path::{Path, PathBuf},
+    sync::{Once, OnceLock},
+};
 
 pub const MAX_SPP_X_ERROR_M: f64 = 65.5;
 pub const MAX_SPP_Y_ERROR_M: f64 = 39.3;
@@ -66,17 +75,6 @@ pub fn init_logger() {
             .filter_level(LevelFilter::Debug)
             .init();
     });
-}
-
-pub fn almanac() -> Almanac {
-    Almanac::until_2035().unwrap_or_else(|e| panic!("Failed to build test Almanac: {e}"))
-}
-
-pub fn earth_frame() -> Frame {
-    Almanac::until_2035()
-        .unwrap_or_else(|e| panic!("Failed to build test Almanac: {e}"))
-        .frame_from_uid(EARTH_J2000)
-        .unwrap_or_else(|e| panic!("Failed to build test EARTH-J2000 frame: {e}"))
 }
 
 pub fn test_orbits() -> OrbitsData {
