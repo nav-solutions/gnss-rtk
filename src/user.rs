@@ -214,8 +214,9 @@ impl UserParameters {
     ///   q = accel_psd . dt³ / 3 on each axis. [UserProfile::Static] leads to
     ///   q = 0: the filter accumulates all measurements.
     /// - Receiver clock: navigation receivers have steered or free running clocks
-    ///   (drifts, jumps), the clock is re-estimated at every epoch
-    ///   (white noise, uninformative prior). The [ClockProfile] will be used when a
+    ///   (drifts, jumps). The navigation filter re-centers the clock on the median
+    ///   innovation at every epoch, the remaining residual is modeled as white noise
+    ///   of 1 µs (300 m). The [ClockProfile] will be used when a
     ///   clock drift state is introduced.
     /// - Other states (if any) are left untouched.
     pub(crate) fn q_matrix(&self, q_mat: &mut DMatrix<f64>, dt: Duration, ndf: usize) {
@@ -229,7 +230,7 @@ impl UserParameters {
         }
 
         if ndf > 3 {
-            q_mat[(3, 3)] = (1.0E-3 * SPEED_OF_LIGHT_M_S).powi(2);
+            q_mat[(3, 3)] = (1.0E-6 * SPEED_OF_LIGHT_M_S).powi(2);
         }
     }
 }

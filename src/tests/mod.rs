@@ -26,6 +26,8 @@ mod time;
 
 pub mod sim;
 
+mod frozen;
+
 pub use data::*;
 mod almanac;
 

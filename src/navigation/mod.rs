@@ -298,9 +298,9 @@ impl Navigation {
             }
         }
 
-        // newly introduced states are unknown
+        // newly introduced states (receiver clock, re-centered at each epoch)
         for i in current..ndf {
-            p[(i, i)] = (1.0E-3 * SPEED_OF_LIGHT_M_S).powi(2);
+            p[(i, i)] = (1.0E-6 * SPEED_OF_LIGHT_M_S).powi(2);
         }
 
         self.kalman.initialize_error_state(&p);
@@ -522,6 +522,11 @@ impl Navigation {
 
             let dx = &p_0 * &gt * &w * z;
 
+            if !dx.iter().chain(p_0.iter()).all(|v| v.is_finite()) {
+                error!("{t} - non finite initial solution");
+                return Err(Error::StateUpdate);
+            }
+
             debug!("(i={ith}) {t} - dx={dx}");
 
             self.apply_correction(t, &mut pending, &dx, uses_rtk)?;
@@ -548,8 +553,30 @@ impl Navigation {
         Ok(())
     }
 
-    /// [Kalman] filter run (error-state EKF).
+    /// [Kalman] filter run (error-state EKF), transactional: the filter
+    /// covariance is only committed when the epoch is validated. A rejected epoch
+    /// (singular geometry, GDOP, non finite values...) leaves the filter untouched.
     pub fn kf_run(
+        &mut self,
+        t: Epoch,
+        nominal: &State,
+        candidates: &[Candidate],
+        size: usize,
+        rtk: &Option<RtkContext>,
+    ) -> Result<(), Error> {
+        let snapshot = self.kalman.clone();
+
+        let ret = self.kf_run_uncommitted(t, nominal, candidates, size, rtk);
+
+        if ret.is_err() {
+            self.kalman = snapshot;
+        }
+
+        ret
+    }
+
+    /// [Kalman] filter run (error-state EKF).
+    fn kf_run_uncommitted(
         &mut self,
         t: Epoch,
         nominal: &State,
@@ -569,7 +596,21 @@ impl Navigation {
             return Err(Error::MatrixMinimalDimension);
         }
 
-        let (g, w, z) = Self::linear_system(&pending, &rows, uses_rtk);
+        let (g, w, mut z) = Self::linear_system(&pending, &rows, uses_rtk);
+
+        if !uses_rtk {
+            // Receiver clock re-centering: the clock is a nuisance parameter that
+            // may drift or jump between epochs. Its nominal value is first moved by
+            // the median innovation, so the filter only estimates a small residual
+            // with a well conditioned covariance (an uninformative clock prior,
+            // ~1E11 m², leads to catastrophic cancellations with few satellites).
+            let mut sorted = z.iter().copied().collect::<Vec<_>>();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let shift_m = sorted[sorted.len() / 2];
+
+            pending.clock_correction_mut(shift_m / SPEED_OF_LIGHT_M_S);
+            z.iter_mut().for_each(|z_i| *z_i -= shift_m);
+        }
 
         debug!("{t} - innovation: {z}");
 
@@ -577,6 +618,16 @@ impl Navigation {
         self.kalman.predict_error_state(&self.f_k, &self.q_k);
 
         let estimate = self.kalman.update_error_state(&g, &w, &z)?;
+
+        if !estimate
+            .x
+            .iter()
+            .chain(estimate.p.iter())
+            .all(|v| v.is_finite())
+        {
+            error!("{t} - non finite state correction");
+            return Err(Error::StateUpdate);
+        }
 
         debug!("{t} - state correction: dx={}", estimate.x);
 
