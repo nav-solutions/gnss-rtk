@@ -7,13 +7,19 @@
 //! processing is deterministic, any degradation fails. Tighten them when the
 //! solver improves.
 //!
+//! Every case must also comply with the contract of its preset (`tests::spec`,
+//! published in the README), unless a derogation (known limitation) is listed.
+//!
 //! Known limitations are expressed as ignored `target_*` tests.
 use crate::{
     prelude::{
         Constellation::{self, BeiDou, GPS, Galileo},
         Method,
     },
-    tests::frozen::{Dataset, Replay, replay},
+    tests::{
+        frozen::{Dataset, Replay, replay},
+        spec::Preset,
+    },
 };
 
 struct Budget {
@@ -25,40 +31,43 @@ struct Budget {
     max_rms_h_m: f64,
     max_rms_v_m: f64,
     max_3d_m: f64,
+    /// Known violation of the preset contract (reason): the contract is then
+    /// checked by the target_frozen_contract_derogations test only.
+    derogation: Option<&'static str>,
 }
 
 #[rustfmt::skip]
 const BUDGETS: &[Budget] = &[
-    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 2.39, max_rms_v_m: 7.68, max_3d_m: 8.93 },
-    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[Galileo], min_availability: 1.00, max_rms_h_m: 16.66, max_rms_v_m: 9.88, max_3d_m: 22.62 },
-    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[BeiDou], min_availability: 0.73, max_rms_h_m: 1.09, max_rms_v_m: 2.05, max_3d_m: 2.43 },
-    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 7.10, max_rms_v_m: 1.89, max_3d_m: 9.29 },
-    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[GPS, Galileo, BeiDou], min_availability: 1.00, max_rms_h_m: 4.84, max_rms_v_m: 1.85, max_3d_m: 6.80 },
-    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: false, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 1.30, max_rms_v_m: 1.14, max_3d_m: 1.95 },
-    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: false, constellations: &[Galileo], min_availability: 1.00, max_rms_h_m: 0.80, max_rms_v_m: 0.19, max_3d_m: 0.97 },
-    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: false, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 1.26, max_rms_v_m: 1.21, max_3d_m: 2.51 },
-    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: true, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 0.29, max_rms_v_m: 0.14, max_3d_m: 0.36 },
-    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: true, constellations: &[Galileo], min_availability: 0.87, max_rms_h_m: 0.45, max_rms_v_m: 0.28, max_3d_m: 0.60 },
-    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: true, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 0.33, max_rms_v_m: 0.31, max_3d_m: 0.54 },
-    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: true, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 0.35, max_rms_v_m: 0.29, max_3d_m: 0.67 },
-    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: true, constellations: &[Galileo], min_availability: 0.87, max_rms_h_m: 0.65, max_rms_v_m: 0.10, max_3d_m: 0.70 },
-    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: true, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 0.49, max_rms_v_m: 0.25, max_3d_m: 0.69 },
-    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 2.29, max_rms_v_m: 2.51, max_3d_m: 6.45 },
-    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[Galileo], min_availability: 0.91, max_rms_h_m: 4.14, max_rms_v_m: 4.01, max_3d_m: 13.20 },
-    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[BeiDou], min_availability: 0.43, max_rms_h_m: 1.26, max_rms_v_m: 3.17, max_3d_m: 3.98 },
-    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 2.08, max_rms_v_m: 1.83, max_3d_m: 6.17 },
-    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[GPS, Galileo, BeiDou], min_availability: 1.00, max_rms_h_m: 1.44, max_rms_v_m: 2.45, max_3d_m: 4.32 },
-    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: false, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 1.22, max_rms_v_m: 0.45, max_3d_m: 1.90 },
-    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: false, constellations: &[Galileo], min_availability: 0.91, max_rms_h_m: 1.08, max_rms_v_m: 0.24, max_3d_m: 1.17 },
-    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: false, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 1.36, max_rms_v_m: 0.74, max_3d_m: 2.56 },
-    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: true, constellations: &[GPS], min_availability: 0.95, max_rms_h_m: 0.33, max_rms_v_m: 0.11, max_3d_m: 0.43 },
-    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: true, constellations: &[Galileo], min_availability: 0.64, max_rms_h_m: 0.32, max_rms_v_m: 0.17, max_3d_m: 0.43 },
-    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: true, constellations: &[BeiDou], min_availability: 0.21, max_rms_h_m: 0.47, max_rms_v_m: 0.78, max_3d_m: 2.02 },
-    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: true, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 0.32, max_rms_v_m: 0.14, max_3d_m: 0.50 },
-    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: true, constellations: &[GPS], min_availability: 0.95, max_rms_h_m: 0.37, max_rms_v_m: 0.17, max_3d_m: 0.70 },
-    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: true, constellations: &[Galileo], min_availability: 0.64, max_rms_h_m: 0.38, max_rms_v_m: 0.15, max_3d_m: 0.79 },
-    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: true, constellations: &[BeiDou], min_availability: 0.21, max_rms_h_m: 0.79, max_rms_v_m: 1.88, max_3d_m: 5.40 },
-    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: true, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 0.41, max_rms_v_m: 0.13, max_3d_m: 0.86 },
+    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 2.39, max_rms_v_m: 7.68, max_3d_m: 8.93, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[Galileo], min_availability: 1.00, max_rms_h_m: 16.66, max_rms_v_m: 9.88, max_3d_m: 22.62, derogation: Some("Galileo E24: ~12 m E1 code bias not rejected (no RAIM), ionosphere not modeled") },
+    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[BeiDou], min_availability: 0.73, max_rms_h_m: 1.09, max_rms_v_m: 2.05, max_3d_m: 2.43, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 7.10, max_rms_v_m: 1.89, max_3d_m: 9.29, derogation: Some("Galileo E24: ~12 m E1 code bias not rejected (no RAIM), ionosphere not modeled") },
+    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: false, constellations: &[GPS, Galileo, BeiDou], min_availability: 1.00, max_rms_h_m: 4.84, max_rms_v_m: 1.85, max_3d_m: 6.80, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: false, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 1.30, max_rms_v_m: 1.14, max_3d_m: 1.95, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: false, constellations: &[Galileo], min_availability: 1.00, max_rms_h_m: 0.80, max_rms_v_m: 0.19, max_3d_m: 0.97, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: false, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 1.26, max_rms_v_m: 1.21, max_3d_m: 2.51, derogation: Some("GPS / Galileo inter-system bias not estimated (single receiver clock)") },
+    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: true, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 0.29, max_rms_v_m: 0.14, max_3d_m: 0.36, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: true, constellations: &[Galileo], min_availability: 0.87, max_rms_h_m: 0.45, max_rms_v_m: 0.28, max_3d_m: 0.60, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::SPP, rtk: true, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 0.33, max_rms_v_m: 0.31, max_3d_m: 0.54, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: true, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 0.35, max_rms_v_m: 0.29, max_3d_m: 0.67, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: true, constellations: &[Galileo], min_availability: 0.87, max_rms_h_m: 0.65, max_rms_v_m: 0.10, max_3d_m: 0.70, derogation: None },
+    Budget { dataset: Dataset::Dense, method: Method::CPP, rtk: true, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 0.49, max_rms_v_m: 0.25, max_3d_m: 0.69, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 2.29, max_rms_v_m: 2.51, max_3d_m: 6.45, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[Galileo], min_availability: 0.91, max_rms_h_m: 4.14, max_rms_v_m: 4.01, max_3d_m: 13.20, derogation: Some("Galileo E24: ~12 m E1 code bias not rejected (no RAIM), ionosphere not modeled") },
+    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[BeiDou], min_availability: 0.43, max_rms_h_m: 1.26, max_rms_v_m: 3.17, max_3d_m: 3.98, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 2.08, max_rms_v_m: 1.83, max_3d_m: 6.17, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: false, constellations: &[GPS, Galileo, BeiDou], min_availability: 1.00, max_rms_h_m: 1.44, max_rms_v_m: 2.45, max_3d_m: 4.32, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: false, constellations: &[GPS], min_availability: 1.00, max_rms_h_m: 1.22, max_rms_v_m: 0.45, max_3d_m: 1.90, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: false, constellations: &[Galileo], min_availability: 0.91, max_rms_h_m: 1.08, max_rms_v_m: 0.24, max_3d_m: 1.17, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: false, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 1.36, max_rms_v_m: 0.74, max_3d_m: 2.56, derogation: Some("GPS / Galileo inter-system bias not estimated (single receiver clock)") },
+    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: true, constellations: &[GPS], min_availability: 0.95, max_rms_h_m: 0.33, max_rms_v_m: 0.11, max_3d_m: 0.43, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: true, constellations: &[Galileo], min_availability: 0.64, max_rms_h_m: 0.32, max_rms_v_m: 0.17, max_3d_m: 0.43, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: true, constellations: &[BeiDou], min_availability: 0.21, max_rms_h_m: 0.47, max_rms_v_m: 0.78, max_3d_m: 2.02, derogation: Some("BeiDou: broadcast orbits and clocks, 4 to 6 satellites") },
+    Budget { dataset: Dataset::Day, method: Method::SPP, rtk: true, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 0.32, max_rms_v_m: 0.14, max_3d_m: 0.50, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: true, constellations: &[GPS], min_availability: 0.95, max_rms_h_m: 0.37, max_rms_v_m: 0.17, max_3d_m: 0.70, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: true, constellations: &[Galileo], min_availability: 0.64, max_rms_h_m: 0.38, max_rms_v_m: 0.15, max_3d_m: 0.79, derogation: None },
+    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: true, constellations: &[BeiDou], min_availability: 0.21, max_rms_h_m: 0.79, max_rms_v_m: 1.88, max_3d_m: 5.40, derogation: Some("BeiDou: broadcast orbits and clocks, 4 to 6 satellites") },
+    Budget { dataset: Dataset::Day, method: Method::CPP, rtk: true, constellations: &[GPS, Galileo], min_availability: 1.00, max_rms_h_m: 0.41, max_rms_v_m: 0.13, max_3d_m: 0.86, derogation: None },
 ];
 
 fn convergence_s(dataset: Dataset) -> f64 {
@@ -109,6 +118,19 @@ fn check_budgets(dataset: Dataset, method: Method, rtk: bool) {
                 stats.max_3d_m <= budget.max_3d_m,
             ),
         ];
+
+        // preset contract (README), unless a known derogation applies
+        if budget.derogation.is_none() {
+            let preset = Preset::new(method, rtk);
+            for violation in preset
+                .contract()
+                .report_violations(&report, convergence_s(dataset))
+                .into_iter()
+                .take(3)
+            {
+                failures.push(format!("{}: {preset:?} contract: {violation}", report.name));
+            }
+        }
 
         for (what, value, limit, ok) in checks {
             if !ok || !value.is_finite() {
@@ -215,6 +237,39 @@ fn frozen_data_consistency() {
     }
 }
 
+/// Target: lift the contract derogations. Each derogated case must eventually
+/// comply with its preset contract (see the derogation reasons in [BUDGETS]).
+#[test]
+#[ignore]
+fn target_frozen_contract_derogations() {
+    let mut failures = Vec::new();
+
+    for budget in BUDGETS.iter().filter(|b| b.derogation.is_some()) {
+        let report = replay(&Replay::new(
+            budget.dataset,
+            budget.method,
+            budget.rtk,
+            budget.constellations,
+        ));
+
+        let violations = Preset::new(budget.method, budget.rtk)
+            .contract()
+            .report_violations(&report, convergence_s(budget.dataset));
+
+        if !violations.is_empty() {
+            failures.push(format!(
+                "{} ({}): {} violations, first: {}",
+                report.name,
+                budget.derogation.unwrap(),
+                violations.len(),
+                violations[0]
+            ));
+        }
+    }
+
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
 /// Target: BeiDou CPP. The B1I group delay (TGD1) is applied as is to the iono free
 /// combination (broadcast clocks refer to B3I): ~25 m vertical bias today.
 #[test]
@@ -255,7 +310,7 @@ fn target_frozen_spp_with_ionosphere_model() {
 #[ignore]
 fn frozen_performance_report() {
     let mut table = String::from(
-        "| case | avail | rms H (m) | rms V (m) | rms 3D (m) | p95 3D (m) | max 3D (m) | budget H / V / max (m) |\n|---|---|---|---|---|---|---|---|\n",
+        "| case | avail | rms H (m) | rms V (m) | rms 3D (m) | p95 3D (m) | max 3D (m) | budget H / V / max (m) | contract |\n|---|---|---|---|---|---|---|---|---|\n",
     );
 
     for budget in BUDGETS {
@@ -266,8 +321,19 @@ fn frozen_performance_report() {
             budget.constellations,
         ));
         let s = report.stats_from(convergence_s(budget.dataset));
+
+        let violations = Preset::new(budget.method, budget.rtk)
+            .contract()
+            .report_violations(&report, convergence_s(budget.dataset));
+
+        let contract = match (violations.is_empty(), budget.derogation) {
+            (true, _) => "OK".to_string(),
+            (false, Some(reason)) => format!("derogation: {reason}"),
+            (false, None) => format!("**{} violations**", violations.len()),
+        };
+
         table.push_str(&format!(
-            "| {} | {:.1}% | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2} / {:.2} / {:.2} |\n",
+            "| {} | {:.1}% | {:.3} | {:.3} | {:.3} | {:.3} | {:.3} | {:.2} / {:.2} / {:.2} | {} |\n",
             report.name,
             report.availability() * 100.0,
             s.rms_h_m,
@@ -278,6 +344,7 @@ fn frozen_performance_report() {
             budget.max_rms_h_m,
             budget.max_rms_v_m,
             budget.max_3d_m,
+            contract,
         ));
     }
 

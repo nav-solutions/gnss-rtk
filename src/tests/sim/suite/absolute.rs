@@ -7,6 +7,8 @@ use crate::{
     },
 };
 
+use crate::tests::spec::{Preset, assert_contract};
+
 use super::{check, frame, no_postfit, params};
 
 /// Noise free, perfectly modeled: the whole chain must be exact (mm level).
@@ -27,6 +29,7 @@ fn ideal_static_spp_cpp_survey() {
             report.clock_rms_ns_from(0.0) < 0.05,
             "clock RMS must be < 0.05 ns",
         );
+        assert_contract(Preset::new(method, false), &report, 0.0);
     }
 }
 
@@ -47,6 +50,7 @@ fn ideal_static_multi_constellation() {
         report.stats().rms_3d_m < 0.02,
         "3D RMS must be < 2 cm",
     );
+    assert_contract(Preset::CPP, &report, 0.0);
 }
 
 /// Wrong apriori (1 km): the solver must converge to the truth.
@@ -69,6 +73,7 @@ fn ideal_static_wrong_apriori() {
         report.stats_from(30.0).max_3d_m < 0.02,
         "must converge after 1 epoch",
     );
+    assert_contract(Preset::CPP, &report, 30.0);
 }
 
 /// Regression test (Sagnac): a large receiver clock offset must not bias the solution
@@ -104,6 +109,7 @@ fn receiver_clock_offset_does_not_bias() {
         report.clock_rms_ns_from(30.0) < 0.1,
         "clock estimate",
     );
+    assert_contract(Preset::CPP, &report, 30.0);
 }
 
 /// Static, geodetic grade noise: CPP accumulates information with the static profile.
@@ -143,6 +149,7 @@ fn realistic_static_cpp_convergence() {
         report.clock_rms_ns_from(600.0) < 4.0,
         "clock RMS < 4 ns",
     );
+    assert_contract(Preset::CPP, &report, 600.0);
 }
 
 /// Regression test (Q from the user profile): accumulating the measurements of a
@@ -210,6 +217,7 @@ fn cpp_is_independent_of_the_ionosphere_model() {
             report.stats().rms_3d_m < 0.02,
             "iono free combination",
         );
+        assert_contract(Preset::CPP, &report, 0.0);
         rms.push(report.stats().rms_3d_m);
     }
 
@@ -251,6 +259,9 @@ fn spp_ionosphere_sensitivity() {
         perfect.stats().rms_3d_m < 0.02,
         "perfect iono model",
     );
+    assert_contract(Preset::SPP, &perfect, 0.0);
+    // Klobuchar like model (50 % error): nominal SPP conditions
+    assert_contract(Preset::SPP, &half, 0.0);
 
     // unmodeled ionosphere mostly projects onto the vertical (positive) and the clock
     let (h, n) = (half.stats(), none.stats());

@@ -26,6 +26,8 @@ mod time;
 
 pub mod sim;
 
+pub mod spec;
+
 mod frozen;
 
 pub use data::*;

@@ -14,6 +14,8 @@ use crate::{
 
 use nalgebra::Vector3;
 
+use crate::tests::spec::{Preset, assert_contract};
+
 use super::{check, frame, no_postfit, params};
 
 fn center() -> Vector3<f64> {
@@ -85,6 +87,7 @@ fn high_dynamics_profile_tracks_pedestrian_and_car() {
 
         check(&report, report.availability() == 1.0, "availability");
         check(&report, report.stats().rms_3d_m < max_rms_m, "3D RMS");
+        assert_contract(Preset::CPP, &report, 0.0);
     }
 }
 

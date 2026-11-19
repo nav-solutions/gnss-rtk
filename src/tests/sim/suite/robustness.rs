@@ -6,6 +6,8 @@ use crate::{
     },
 };
 
+use crate::tests::spec::{Preset, assert_contract};
+
 use super::{check, frame, no_postfit, params};
 
 fn static_cpp() -> RunOptions {
@@ -54,6 +56,7 @@ fn total_signal_outage() {
         report.stats_from(1800.0).rms_3d_m < 0.8,
         "accuracy after the outage",
     );
+    assert_contract(Preset::CPP, &report, 1800.0);
 }
 
 /// Partial outage (2 satellites masked for 10 minutes, one high, one low).
@@ -76,6 +79,7 @@ fn partial_outage() {
 
     check(&report, report.availability() == 1.0, "availability");
     check(&report, report.stats_from(600.0).rms_3d_m < 0.8, "3D RMS");
+    assert_contract(Preset::CPP, &report, 600.0);
 }
 
 /// Free running oscillator: large offset, large drift, random walk.
@@ -101,6 +105,7 @@ fn free_running_receiver_clock() {
         report.clock_rms_ns_from(600.0) < 4.0,
         "clock tracking",
     );
+    assert_contract(Preset::CPP, &report, 600.0);
 }
 
 /// Low cost receiver, single frequency.
@@ -174,4 +179,5 @@ fn six_hours_static() {
     check(&report, report.availability() == 1.0, "availability");
     check(&report, stats.rms_3d_m < 0.5, "3D RMS");
     check(&report, stats.max_3d_m < 1.5, "3D max");
+    assert_contract(Preset::CPP, &report, 1800.0);
 }

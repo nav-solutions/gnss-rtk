@@ -11,6 +11,8 @@ use crate::{
     },
 };
 
+use crate::tests::spec::{Preset, assert_contract};
+
 use super::{check, frame, no_postfit, params};
 
 /// Noise free RTK must be exact for short baselines. This used to fail by
@@ -33,6 +35,7 @@ fn ideal_rtk_short_baselines() {
             let report = run(&sim, &RunOptions::new(method, Technique::Rtk));
             check(&report, report.availability() == 1.0, "availability");
             check(&report, report.stats().rms_3d_m < max_rms_m, "3D RMS");
+            assert_contract(Preset::new(method, true), &report, 0.0);
         }
     }
 }
@@ -50,6 +53,7 @@ fn ideal_rtk_long_baseline() {
 
     let report = run(&sim, &RunOptions::new(Method::CPP, Technique::Rtk));
     check(&report, report.stats().rms_3d_m < 0.2, "30 km baseline");
+    assert_contract(Preset::RtkCPP, &report, 0.0);
 }
 
 /// Short baseline: the ionosphere cancels in the double differences, even
@@ -70,6 +74,7 @@ fn rtk_spp_cancels_the_ionosphere() {
 
     let report = run(&sim, &RunOptions::new(Method::SPP, Technique::Rtk));
     check(&report, report.stats().rms_3d_m < 0.05, "iono must cancel");
+    assert_contract(Preset::RtkSPP, &report, 0.0);
 }
 
 /// Realistic noise, static rover, 5 km baseline.
@@ -97,6 +102,10 @@ fn realistic_static_rtk() {
             report.stats_from(600.0).rms_3d_m < max_rms_m,
             "3D RMS after 10'",
         );
+        // contract after convergence: the iono free code combination (CPP) is ~3x noisier,
+        // the static accumulation takes ~40' to bring the vertical below 0.5 m.
+        let converged_s = if method == Method::CPP { 2400.0 } else { 600.0 };
+        assert_contract(Preset::new(method, true), &report, converged_s);
     }
 }
 
@@ -138,6 +147,15 @@ fn context_switch_rtk_ppp_rtk() {
             solver.rtk(epoch.epoch, opts.params, &epoch.candidates, &base)
         }
         .unwrap_or_else(|e| panic!("t={}s (network lost={network_lost}): {e}", epoch.t_s));
+
+        // preset performance contract (README)
+        let preset = if network_lost {
+            Preset::CPP
+        } else {
+            Preset::RtkCPP
+        };
+        let truth = epoch.truth.position_m;
+        crate::tests::spec::assert_pvt_contract(preset, &pvt, (truth[0], truth[1], truth[2]));
 
         let est = Vector3::new(pvt.pos_m.0, pvt.pos_m.1, pvt.pos_m.2);
         let err = (est - epoch.truth.position_m).norm();

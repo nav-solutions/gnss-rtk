@@ -196,6 +196,47 @@ Summary of supported modes:
 
 NOK: unreleased, unavailable or untested. Will at best diverge, and most likely panic if you deploy this mode.
 
+Performance contract
+====================
+
+Each preset comes with a minimal performance, checked at every epoch (after the
+convergence period of the scenario) by every test that runs the navigation solver
+in nominal conditions, on simulated data (`src/tests/sim`) and on real data
+(`src/tests/frozen`, `src/tests/{spp,cpp,rtk}`):
+
+| Preset   | max \|East\|, \|North\| | max \|Up\| | Clock: truth / stability | max GDOP | max TDOP           |
+|----------|----------------------|------------|--------------------------|----------|--------------------|
+| SPP      | 5 m                  | 10 m       | 50 ns / 30 ns            | 5        | 3                  |
+| CPP      | 1 m                  | 2 m        | 10 ns / 10 ns            | 5        | 3                  |
+| PPP      | 0.3 m                | 0.5 m      | 2 ns / 2 ns              | 5        | 3                  |
+| RTK-SPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
+| RTK-CPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
+| RTK-PPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
+
+- Errors are expressed in the local East / North / Up frame: ECEF axes mix horizontal
+  and vertical errors depending on the latitude.
+- Clock: error against the truth when it is known (simulation), otherwise stability
+  of the estimate (maximal deviation from its linear trend, steered receivers).
+- Nominal conditions: static or low dynamics receiver, open sky, GDOP up to 5,
+  ionosphere model for SPP, RTK baselines up to 65 km.
+- Convergence periods used by the tests: none in ideal conditions, 10' for static
+  geodetic receivers (CPP, RTK-SPP), 40' for RTK-CPP (iono free code noise).
+- PPP is the target of the ongoing work (its tests are ignored until it is released).
+  RTK-PPP does not resolve the phase ambiguities yet: its contract will be tightened
+  to the centimeter level.
+
+Measured on real data (ESBC00DNK / MOJN00DNK, 2020-06-25, 24 h, 3D RMS after 1 h):
+CPP 0.92 m (GPS), 0.79 m (Galileo); RTK (65 km baseline) 0.24 m (SPP), 0.30 m (CPP).
+Run `cargo test --release frozen_performance_report -- --ignored --nocapture` for the
+complete table.
+
+Known derogations (expressed as ignored `target_*` tests):
+
+- SPP with Galileo: one satellite (E24) exhibits a ~12 m E1 code bias in the test data,
+  which is not rejected (no RAIM yet), and the test environment has no ionosphere model.
+- CPP mixing GPS and Galileo: the inter-system bias is not estimated (single receiver clock).
+- RTK with BeiDou only: broadcast orbits / clocks and 4 to 6 satellites.
+
 Solver, strategies and API
 ==========================
 

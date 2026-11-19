@@ -8,6 +8,8 @@ use crate::{
     tests::sim::{IonoModel, NoiseModel, RunOptions, Scenario, Simulator, Technique, run},
 };
 
+use crate::tests::spec::{Preset, assert_contract};
+
 use super::{check, frame, no_postfit, params};
 
 fn static_ppp() -> RunOptions {
@@ -32,6 +34,7 @@ fn target_ideal_float_ppp() {
 
     check(&report, report.availability() == 1.0, "availability");
     check(&report, report.stats().rms_3d_m < 0.01, "3D RMS");
+    assert_contract(Preset::PPP, &report, 0.0);
 }
 
 /// Float PPP, geodetic receiver: classical PPP convergence (< 10 cm within 30').
@@ -63,4 +66,5 @@ fn target_realistic_float_ppp_convergence() {
         "3D RMS after 1 h",
     );
     check(&report, report.clock_rms_ns_from(3600.0) < 0.3, "timing");
+    assert_contract(Preset::PPP, &report, 1800.0);
 }

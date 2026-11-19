@@ -86,6 +86,14 @@ fn static_spp() {
         match status {
             Err(e) => panic!("Static SPP process failed with invalid error: {e}"),
             Ok(pvt) => {
+                // preset performance contract (README): known derogation
+                crate::tests::spec::check_pvt_contract_derogated(
+                    crate::tests::spec::Preset::SPP,
+                    &pvt,
+                    ROVER_REFERENCE_COORDS_ECEF_M,
+                    "legacy frozen points: Galileo E24 E1 code bias, ionosphere not modeled",
+                );
+
                 info!("Solution #{} {:#?}", nth + 1, pvt);
 
                 let (pos_x_m, pos_y_m, pos_z_m) = pvt.pos_m;

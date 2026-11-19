@@ -86,6 +86,14 @@ fn static_cpp() {
         match status {
             Err(e) => panic!("Static CPP process failed with invalid error: {e}"),
             Ok(pvt) => {
+                // preset performance contract (README): known derogation
+                crate::tests::spec::check_pvt_contract_derogated(
+                    crate::tests::spec::Preset::CPP,
+                    &pvt,
+                    ROVER_REFERENCE_COORDS_ECEF_M,
+                    "legacy frozen points: E1/E5b code while the clocks refer to E1/E5a (group delay not corrected)",
+                );
+
                 info!("Solution #{} {:#?}", nth + 1, pvt);
 
                 let (pos_x_m, pos_y_m, pos_z_m) = pvt.pos_m;

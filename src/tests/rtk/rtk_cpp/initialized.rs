@@ -86,6 +86,13 @@ fn static_rtk_cpp() {
         match status {
             Err(e) => panic!("Static RTK-CPP process failed with invalid error: {e}"),
             Ok(pvt) => {
+                // preset performance contract (README)
+                crate::tests::spec::assert_pvt_contract(
+                    crate::tests::spec::Preset::RtkCPP,
+                    &pvt,
+                    ROVER_REFERENCE_COORDS_ECEF_M,
+                );
+
                 info!("Solution #{} {:#?}", nth + 1, pvt);
 
                 let (pos_x_m, pos_y_m, pos_z_m) = pvt.pos_m;

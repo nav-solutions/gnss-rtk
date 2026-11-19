@@ -116,6 +116,7 @@ pub fn replay(opts: &Replay) -> RunReport {
             solution: None,
             error_enu_m: None,
             gdop: None,
+            tdop: None,
             failure: None,
         };
 
@@ -125,6 +126,7 @@ pub fn replay(opts: &Replay) -> RunReport {
                 outcome.solution = Some((est, pvt.clock_offset_s));
                 outcome.error_enu_m = Some(ecef_delta_to_enu(&truth, &(est - truth)));
                 outcome.gdop = Some(pvt.gdop);
+                outcome.tdop = Some(pvt.tdop);
             },
             Err(e) => outcome.failure = Some(e.to_string()),
         }

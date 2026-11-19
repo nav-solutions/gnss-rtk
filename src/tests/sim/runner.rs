@@ -91,6 +91,7 @@ pub struct EpochOutcome {
     /// ENU error (m)
     pub error_enu_m: Option<Vector3<f64>>,
     pub gdop: Option<f64>,
+    pub tdop: Option<f64>,
     pub failure: Option<String>,
 }
 
@@ -125,6 +126,24 @@ pub struct Stats {
     pub p95_3d_m: f64,
     pub max_3d_m: f64,
     pub mean_enu_m: (f64, f64, f64),
+}
+
+/// Worst values (per epoch) over a set of epochs
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Worst {
+    /// Number of solutions considered
+    pub count: usize,
+    /// max |East|, |North|, |Up| errors (m)
+    pub e_m: f64,
+    pub n_m: f64,
+    pub u_m: f64,
+    /// max |clock error| (s), when the truth is known
+    pub dt_s: Option<f64>,
+    /// max deviation of the clock estimate from its linear fit (s):
+    /// clock estimation noise, usable without truth (steered receivers).
+    pub dt_jitter_s: f64,
+    pub gdop: f64,
+    pub tdop: f64,
 }
 
 /// Result of a full run
@@ -214,6 +233,65 @@ impl RunReport {
                 errors.iter().map(|e| e[2]).sum::<f64>() / n,
             ),
         }
+    }
+
+    /// Worst values over solutions obtained at `t_s >= from_s`
+    pub fn worst_from(&self, from_s: f64) -> Worst {
+        let sols = self
+            .outcomes
+            .iter()
+            .filter(|o| o.t_s >= from_s && o.solution.is_some())
+            .collect::<Vec<_>>();
+
+        let mut w = Worst {
+            count: sols.len(),
+            ..Default::default()
+        };
+
+        if sols.is_empty() {
+            return w;
+        }
+
+        for o in sols.iter() {
+            if let Some(e) = o.error_enu_m {
+                w.e_m = w.e_m.max(e[0].abs());
+                w.n_m = w.n_m.max(e[1].abs());
+                w.u_m = w.u_m.max(e[2].abs());
+            }
+            if let Some(dt) = o.clock_error_s() {
+                if dt.is_finite() {
+                    w.dt_s = Some(w.dt_s.unwrap_or(0.0).max(dt.abs()));
+                }
+            }
+            w.gdop = w.gdop.max(o.gdop.unwrap_or(0.0));
+            w.tdop = w.tdop.max(o.tdop.unwrap_or(0.0));
+        }
+
+        // clock estimation noise: deviation from a linear fit
+        let pts = sols
+            .iter()
+            .map(|o| (o.t_s, o.solution.unwrap().1))
+            .collect::<Vec<_>>();
+
+        let n = pts.len() as f64;
+        let mean_t = pts.iter().map(|p| p.0).sum::<f64>() / n;
+        let mean_c = pts.iter().map(|p| p.1).sum::<f64>() / n;
+        let var_t = pts.iter().map(|p| (p.0 - mean_t).powi(2)).sum::<f64>();
+        let slope = if var_t > 0.0 {
+            pts.iter()
+                .map(|p| (p.0 - mean_t) * (p.1 - mean_c))
+                .sum::<f64>()
+                / var_t
+        } else {
+            0.0
+        };
+
+        w.dt_jitter_s = pts
+            .iter()
+            .map(|p| (p.1 - (mean_c + slope * (p.0 - mean_t))).abs())
+            .fold(0.0, f64::max);
+
+        w
     }
 
     /// Statistics over the whole run
@@ -373,6 +451,7 @@ pub fn run(sim: &Simulator, opts: &RunOptions) -> RunReport {
             solution: None,
             error_enu_m: None,
             gdop: None,
+            tdop: None,
             failure: None,
         };
 
@@ -382,6 +461,7 @@ pub fn run(sim: &Simulator, opts: &RunOptions) -> RunReport {
                 outcome.solution = Some((est, pvt.clock_offset_s));
                 outcome.error_enu_m = Some(ecef_delta_to_enu(&truth, &(est - truth)));
                 outcome.gdop = Some(pvt.gdop);
+                outcome.tdop = Some(pvt.tdop);
             },
             Err(e) => {
                 outcome.failure = Some(e.to_string());
