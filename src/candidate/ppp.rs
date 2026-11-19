@@ -109,7 +109,12 @@ impl Candidate {
             // TODO
         }
 
-        bias_m += self.ionod;
+        // The ionospheric model only applies to single frequency navigation:
+        // dual frequency methods use the iono free combination, which already
+        // cancels (first order) ionospheric delay.
+        if cfg.method == Method::SPP {
+            bias_m += self.ionod;
+        }
 
         bias_m += self.tropod;
         contribution.tropo_bias = Some(self.tropod);
