@@ -119,6 +119,11 @@ impl ARSolver {
         }
     }
 
+    /// Float (iono free) ambiguity for this [SV], expressed in meters.
+    pub fn float_ambiguity_m(&self, _sv: SV) -> Option<f64> {
+        None
+    }
+
     /// Reset filter.
     pub fn reset(&mut self) {
         self.clear();
@@ -192,11 +197,11 @@ impl ARSolver {
         candidates: &[Candidate],
         params: UserParameters,
         size: usize,
-        ref_position_ecef_m: Vector3<f64>,
     ) -> Result<(), Error> {
         const NB_ITER: usize = 10;
 
         let mut pending = state.clone();
+        let ref_position_ecef_m = pending.to_position_ecef_m();
         let mut dop = DilutionOfPrecision::default();
 
         // measurements
@@ -399,7 +404,7 @@ impl ARSolver {
         for i in 0..lambda_ndf {
             self.lambda_x[i] = self.x_k[offset + i];
 
-            for j in 1..lambda_ndf {
+            for j in 0..lambda_ndf {
                 self.lambda_q[(i, j)] = self.p_k[(offset + i, j + offset)];
             }
         }
@@ -440,9 +445,9 @@ impl ARSolver {
         candidates: &[Candidate],
         params: UserParameters,
         size: usize,
-        pivot_position_ecef_m: (f64, f64, f64),
     ) -> Result<(), Error> {
         let mut pending = self.state.clone();
+        let ref_position_ecef_m = pending.to_position_ecef_m();
 
         // measurements
         for i in 0..size {

@@ -163,6 +163,98 @@ impl Kalman {
         self.predicted.reset();
     }
 
+    /// Initializes this filter as an error-state filter, from the
+    /// covariance of the initial (least squares) estimate.
+    ///
+    /// The error-state formulation keeps the nominal state outside of the filter:
+    /// after each update, the correction is applied to the nominal state
+    /// and the error-state is reset to zero. Only the covariance lives here.
+    pub fn initialize_error_state(&mut self, p_0: &DMatrix<f64>) {
+        let n = p_0.nrows();
+        self.predicted = KfEstimate {
+            x: DVector::<f64>::zeros(n),
+            p: p_0.clone(),
+        };
+        self.initialized = true;
+    }
+
+    /// Current covariance
+    pub fn covariance(&self) -> &DMatrix<f64> {
+        &self.predicted.p
+    }
+
+    /// Error-state prediction: P⁻ = F P Fᵀ + Q (the predicted error is null).
+    pub fn predict_error_state(&mut self, f_k: &DMatrix<f64>, q_k: &DMatrix<f64>) {
+        assert!(self.initialized, "internal error: filter not initialized!");
+        let p = f_k * &self.predicted.p * f_k.transpose() + q_k;
+        let n = p.nrows();
+        self.predicted = KfEstimate {
+            x: DVector::<f64>::zeros(n),
+            p,
+        };
+    }
+
+    /// Error-state measurement update (standard form + Joseph covariance update).
+    ///
+    /// ## Input
+    /// - g_k: observation (design) matrix H
+    /// - w_k: weight matrix, inverse of the measurement covariance R (diagonal)
+    /// - z_k: innovation vector (observed - computed, at the nominal state)
+    ///
+    /// ## Output
+    /// - [KfEstimate] where x is the state correction (δx) and P the posterior covariance.
+    ///   The internal error-state is reset (δx applied by the caller).
+    pub fn update_error_state(
+        &mut self,
+        g_k: &DMatrix<f64>,
+        w_k: &DMatrix<f64>,
+        z_k: &DVector<f64>,
+    ) -> Result<KfEstimate, Error> {
+        assert!(self.initialized, "internal error: filter not initialized!");
+
+        let n = self.predicted.p.nrows();
+        let m = z_k.nrows();
+
+        if g_k.ncols() != n || g_k.nrows() != m || w_k.nrows() != m || w_k.ncols() != m {
+            return Err(Error::MatrixDimension);
+        }
+
+        // R = W⁻¹ (diagonal weights)
+        let mut r_k = DMatrix::<f64>::zeros(m, m);
+
+        for i in 0..m {
+            let w = w_k[(i, i)];
+            if w <= 0.0 {
+                return Err(Error::MatrixFormationError);
+            }
+            r_k[(i, i)] = 1.0 / w;
+        }
+
+        let p_minus = &self.predicted.p;
+        let gt = g_k.transpose();
+
+        let s_k = g_k * p_minus * &gt + &r_k;
+        let s_inv = s_k.try_inverse().ok_or(Error::MatrixInversion)?;
+
+        let k_k = p_minus * &gt * s_inv;
+
+        let dx = &k_k * z_k;
+
+        // Joseph form: numerically stable, keeps P symmetric positive
+        let i_kh = DMatrix::<f64>::identity(n, n) - &k_k * g_k;
+        let mut p_plus = &i_kh * p_minus * i_kh.transpose() + &k_k * r_k * k_k.transpose();
+
+        // enforce symmetry
+        p_plus = (&p_plus + p_plus.transpose()) * 0.5;
+
+        self.predicted = KfEstimate {
+            x: DVector::<f64>::zeros(n),
+            p: p_plus.clone(),
+        };
+
+        Ok(KfEstimate { x: dx, p: p_plus })
+    }
+
     /// Run this [Kalman] filter, returning new [KfEstimate].
     ///
     /// ## Input
