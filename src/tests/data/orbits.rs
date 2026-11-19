@@ -329,23 +329,109 @@ impl OrbitsData {
 }
 
 impl OrbitSource for OrbitsData {
-    fn state_at(&self, epoch: Epoch, sv: SV, _: Frame) -> Option<Orbit> {
-        let dt_1s = Duration::from_seconds(1.0);
-
-        let orbit = self
+    /// The solver requests the orbital state at transmission time (about 70 ms
+    /// before the sampling epoch): the frozen SP3 samples (15') are interpolated
+    /// (Lagrange, all samples of this satellite) at the requested instant.
+    /// Returning the sample of the reception epoch would misplace each satellite
+    /// by ~300 m along its track.
+    fn state_at(&self, epoch: Epoch, sv: SV, frame: Frame) -> Option<Orbit> {
+        let samples = self
             .map
             .iter()
-            .filter_map(|(k, v)| {
-                if k.sv == sv && (k.epoch - epoch).abs() < dt_1s {
-                    Some(v)
-                } else {
-                    None
-                }
+            .filter(|(k, _)| k.sv == sv)
+            .map(|(k, v)| {
+                let pos_vel_km = v.to_cartesian_pos_vel();
+                (
+                    (k.epoch - epoch).to_seconds(),
+                    [pos_vel_km[0], pos_vel_km[1], pos_vel_km[2]],
+                )
             })
-            .reduce(|k, _| k)?;
+            .collect::<Vec<_>>();
 
-        Some(*orbit)
+        let (x_km, y_km, z_km) = lagrange_interpolation(&samples)?;
+
+        Some(Orbit::from_position(x_km, y_km, z_km, epoch, frame))
     }
+}
+
+/// Maximal extrapolation (s): first epoch transmission times precede the first sample.
+pub(crate) const MAX_EXTRAPOLATION_S: f64 = 300.0;
+
+/// Lagrange interpolation at t = 0, of (t_i, [x_i, y_i, z_i]) samples.
+/// Returns None if less than 2 samples, or if t = 0 is more than
+/// [MAX_EXTRAPOLATION_S] outside of the sampling span.
+pub(crate) fn lagrange_interpolation(samples: &[(f64, [f64; 3])]) -> Option<(f64, f64, f64)> {
+    if samples.len() < 2 {
+        return None;
+    }
+
+    let t_min = samples
+        .iter()
+        .map(|(t, _)| *t)
+        .fold(f64::INFINITY, f64::min);
+    let t_max = samples
+        .iter()
+        .map(|(t, _)| *t)
+        .fold(f64::NEG_INFINITY, f64::max);
+
+    if t_min > MAX_EXTRAPOLATION_S || t_max < -MAX_EXTRAPOLATION_S {
+        return None;
+    }
+
+    let mut out = [0.0; 3];
+
+    for (i, (t_i, p_i)) in samples.iter().enumerate() {
+        let mut l_i = 1.0;
+
+        for (j, (t_j, _)) in samples.iter().enumerate() {
+            if i != j {
+                l_i *= (0.0 - t_j) / (t_i - t_j);
+            }
+        }
+
+        for k in 0..3 {
+            out[k] += l_i * p_i[k];
+        }
+    }
+
+    Some((out[0], out[1], out[2]))
+}
+
+#[test]
+fn frozen_orbits_interpolation() {
+    let earth_frame = build_earth_frame();
+    let data = OrbitsData::new(earth_frame);
+
+    let t1 = Epoch::from_str("2020-06-25T00:15:00 GPST").unwrap();
+
+    // on a sample: exact
+    let sample = data.map[&OrbitsDataKey { sv: E01, epoch: t1 }].to_cartesian_pos_vel();
+    let interp = data
+        .state_at(t1, E01, earth_frame)
+        .unwrap()
+        .to_cartesian_pos_vel();
+
+    for i in 0..3 {
+        assert!((sample[i] - interp[i]).abs() < 1E-6);
+    }
+
+    // 75 ms earlier: the satellite moved by v.dt (earth fixed velocity: ~200 to 300 m)
+    let tx = t1 - Duration::from_milliseconds(75.0);
+    let moved = data
+        .state_at(tx, E01, earth_frame)
+        .unwrap()
+        .to_cartesian_pos_vel();
+
+    let d_m = ((moved[0] - sample[0]).powi(2)
+        + (moved[1] - sample[1]).powi(2)
+        + (moved[2] - sample[2]).powi(2))
+    .sqrt()
+        * 1.0E3;
+    assert!(d_m > 150.0 && d_m < 350.0, "satellite moved by {d_m} m");
+
+    // no extrapolation
+    let outside = Epoch::from_str("2020-06-25T02:00:00 GPST").unwrap();
+    assert!(data.state_at(outside, E01, earth_frame).is_none());
 }
 
 #[test]

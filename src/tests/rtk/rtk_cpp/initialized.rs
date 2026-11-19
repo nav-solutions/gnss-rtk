@@ -4,9 +4,7 @@ use std::str::FromStr;
 
 use crate::{
     navigation::apriori::Apriori,
-    prelude::{
-        Almanac, ClockProfile, Config, Epoch, Frame, Method, Solver, UserParameters, UserProfile,
-    },
+    prelude::{Almanac, ClockProfile, Epoch, Frame, Method, Solver, UserParameters, UserProfile},
     tests::{
         CandidatesBuilder, MAX_RTK_CPP_GDOP, MAX_RTK_CPP_X_ERROR_M, MAX_RTK_CPP_Y_ERROR_M,
         MAX_RTK_CPP_Z_ERROR_M, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment,
@@ -36,7 +34,7 @@ fn build_initial_apriori() -> Apriori {
 fn static_rtk_cpp() {
     init_logger();
 
-    let cfg = Config::default().with_navigation_method(Method::CPP);
+    let cfg = crate::tests::navigation_test_config(Method::CPP);
 
     let default_params = UserParameters::new(UserProfile::Static, ClockProfile::Quartz);
 

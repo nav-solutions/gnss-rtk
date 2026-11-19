@@ -37,34 +37,57 @@ use std::{
     sync::{Once, OnceLock},
 };
 
-pub const MAX_SPP_X_ERROR_M: f64 = 65.5;
-pub const MAX_SPP_Y_ERROR_M: f64 = 39.3;
-pub const MAX_SPP_Z_ERROR_M: f64 = 64.1;
+// Performance budgets of the frozen data tests (ESBC00DNK rover, MOJN00DNK base,
+// 2020-06-25, Galileo, GRG SP3 orbits + 30s clocks), absolute ECEF errors per axis.
+//
+// Budgets are about 1.3 to 1.5 x the worst error observed on the frozen epochs:
+// the processing is deterministic, so any degradation is caught. Tighten them
+// when the solver improves (each budget documents what limits it today).
+//
+// SPP: L1 only, the test environment does not model the ionosphere (~30 m vertical).
+pub const MAX_SPP_X_ERROR_M: f64 = 15.0;
+pub const MAX_SPP_Y_ERROR_M: f64 = 5.0;
+pub const MAX_SPP_Z_ERROR_M: f64 = 35.0;
 pub const MAX_SPP_GDOP: f64 = 3.90;
 
-pub const MAX_RTK_SPP_X_ERROR_M: f64 = 24.5;
-pub const MAX_RTK_SPP_Y_ERROR_M: f64 = 11.5;
-pub const MAX_RTK_SPP_Z_ERROR_M: f64 = 97.0;
+// RTK-SPP: 35 km baseline, single frequency double differences.
+pub const MAX_RTK_SPP_X_ERROR_M: f64 = 0.6;
+pub const MAX_RTK_SPP_Y_ERROR_M: f64 = 0.5;
+pub const MAX_RTK_SPP_Z_ERROR_M: f64 = 0.45;
 pub const MAX_RTK_SPP_GDOP: f64 = 1.99;
 
-pub const MAX_CPP_X_ERROR_M: f64 = 51.0;
-pub const MAX_CPP_Y_ERROR_M: f64 = 38.0;
-pub const MAX_CPP_Z_ERROR_M: f64 = 45.0;
+// CPP: iono free code. Limited by code noise and unmodeled antenna offsets
+// (reference coordinates are the marker, the ARP is 21.6 cm above).
+pub const MAX_CPP_X_ERROR_M: f64 = 0.8;
+pub const MAX_CPP_Y_ERROR_M: f64 = 0.8;
+pub const MAX_CPP_Z_ERROR_M: f64 = 2.2;
 pub const MAX_CPP_GDOP: f64 = 3.90;
 
-pub const MAX_RTK_CPP_X_ERROR_M: f64 = 24.59;
-pub const MAX_RTK_CPP_Y_ERROR_M: f64 = 11.5;
-pub const MAX_RTK_CPP_Z_ERROR_M: f64 = 97.35;
+// RTK-CPP: also used by the RTK -> CPP context switch test (absolute epochs).
+pub const MAX_RTK_CPP_X_ERROR_M: f64 = 0.8;
+pub const MAX_RTK_CPP_Y_ERROR_M: f64 = 0.6;
+pub const MAX_RTK_CPP_Z_ERROR_M: f64 = 1.2;
 pub const MAX_RTK_CPP_GDOP: f64 = 1.99;
 
-pub const MAX_RTK_PPP_X_ERROR_M: f64 = 24.59;
-pub const MAX_RTK_PPP_Y_ERROR_M: f64 = 11.5;
-pub const MAX_RTK_PPP_Z_ERROR_M: f64 = 97.35;
+pub const MAX_RTK_PPP_X_ERROR_M: f64 = 0.25;
+pub const MAX_RTK_PPP_Y_ERROR_M: f64 = 0.65;
+pub const MAX_RTK_PPP_Z_ERROR_M: f64 = 0.2;
 pub const MAX_RTK_PPP_GDOP: f64 = 1.99;
 
+// Bancroft: raw L1 pseudo ranges, no atmospheric correction.
 pub const MAX_SURVEY_BANCROFT_X_ERROR_M: f64 = 35.0;
-pub const MAX_SURVEY_BANCROFT_Y_ERROR_M: f64 = 110.0;
-pub const MAX_SURVEY_BANCROFT_Z_ERROR_M: f64 = 30.0;
+pub const MAX_SURVEY_BANCROFT_Y_ERROR_M: f64 = 20.0;
+pub const MAX_SURVEY_BANCROFT_Z_ERROR_M: f64 = 25.0;
+
+/// [Config] used by the navigation tests on frozen data: default settings,
+/// but the postfit smoother is disabled so every epoch evaluates the navigation
+/// filter itself (the smoother freezes the published solution on its first value
+/// with such sparse sampling).
+pub fn navigation_test_config(method: crate::prelude::Method) -> crate::prelude::Config {
+    let mut cfg = crate::prelude::Config::default().with_navigation_method(method);
+    cfg.solver.postfit_denoising = 0.0;
+    cfg
+}
 
 static INIT: Once = Once::new();
 

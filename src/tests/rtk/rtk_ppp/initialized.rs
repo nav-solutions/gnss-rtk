@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use crate::{
     navigation::apriori::Apriori,
-    prelude::{Almanac, Config, Epoch, Frame, Method, Solver, UserParameters},
+    prelude::{Almanac, Epoch, Frame, Method, Solver, UserParameters},
     tests::{
         CandidatesBuilder, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment,
         TestSpacebornBiases, ephemeris::NullEph, init_logger, time::NullTime,
@@ -33,7 +33,7 @@ fn build_initial_apriori() -> Apriori {
 fn static_rtk_ppp() {
     init_logger();
 
-    let cfg = Config::default().with_navigation_method(Method::PPP);
+    let cfg = crate::tests::navigation_test_config(Method::PPP);
 
     let default_params = UserParameters::default();
 
