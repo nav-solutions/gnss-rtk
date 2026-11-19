@@ -4,7 +4,7 @@ use anise::constants::SPEED_OF_LIGHT_KM_S;
 pub const EARTH_ANGULAR_VEL_RAD: f64 = 7.2921151467E-5;
 
 /// Earth gravitational constant (m^3 s-2)
-pub const EARTH_GRAVITATION_MU_M3_S2: f64 = 3.986004 * 10.0E14;
+pub const EARTH_GRAVITATION_MU_M3_S2: f64 = 3.986004418E14;
 
 // /// Sun gravitational constant (m^3 s-2)
 // pub const SUN_GRAVITATION_MU_M3_S2: f64 = 1.327124 * 10.0E20;
