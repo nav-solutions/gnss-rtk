@@ -51,7 +51,7 @@ impl Bancroft {
                 let (x_i, y_i, z_i) = (state[0], state[1], state[2]);
 
                 if let Some((_, r_i)) = cd[i].best_snr_range_m() {
-                    let dt_i = cd[i].clock_corr.duration.to_seconds();
+                    let dt_i = cd[i].clock_corr.seconds();
                     let tgd_i = cd[i].tgd.to_seconds();
                     let pr_i = r_i + dt_i * SPEED_OF_LIGHT_M_S - tgd_i;
 

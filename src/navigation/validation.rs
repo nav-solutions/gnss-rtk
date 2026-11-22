@@ -64,7 +64,7 @@ impl Validator {
 
             let rho = ((sv_x - x).powi(2) + (sv_y - y).powi(2) + (sv_z - z).powi(2)).sqrt();
 
-            let dt = cd.clock_corr.unwrap().duration.to_seconds() - dt;
+            let dt = cd.clock_corr.unwrap().seconds() - dt;
 
             residuals[idx] = pr;
             residuals[idx] -= rho;

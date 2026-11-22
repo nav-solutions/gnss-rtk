@@ -7,7 +7,7 @@
 //! |----------|----------|--------|---------------|-----|------------------|
 //! | SPP      | 5 m      | 10 m   | 50 ns / 30 ns | 5   | 3                |
 //! | CPP      | 1 m      | 2 m    | 10 ns / 10 ns | 5   | 3                |
-//! | PPP      | 0.3 m    | 0.5 m  | 2 ns / 2 ns   | 5   | 3                |
+//! | PPP      | 0.3 m    | 0.5 m  | 2 ns / 10 ns  | 5   | 3                |
 //! | RTK-SPP  | 0.5 m    | 0.5 m  | n/a           | 5   | 0 (not estimated)|
 //! | RTK-CPP  | 0.5 m    | 0.5 m  | n/a           | 5   | 0 (not estimated)|
 //! | RTK-PPP  | 0.5 m    | 0.5 m  | n/a           | 5   | 0 (not estimated)|
@@ -16,7 +16,11 @@
 //!   ECEF axes mix horizontal and vertical errors depending on the latitude.
 //! - Every epoch, after the convergence period of the scenario, must comply.
 //! - Clock: against the truth when known (simulation), otherwise the stability of
-//!   the estimate (max deviation from its linear fit, steered receivers).
+//!   the estimate (max deviation from its linear fit, steered receivers). On real
+//!   data, the stability is bounded by the receiver oscillator itself (~1 ns white
+//!   noise for ESBC00DNK): the PPP clock precision is verified by comparing two
+//!   independent estimates (GPS only, Galileo only), which agree within 0.1 ns (1 h)
+//!   and 0.5 ns (1 day) RMS.
 //! - Nominal conditions: static or low dynamics receiver, open sky, GDOP <= 5,
 //!   ionosphere model for SPP, RTK baseline up to 65 km.
 use nalgebra::Vector3;
@@ -87,7 +91,9 @@ impl Preset {
                 max_horizontal_axis_m: 0.3,
                 max_vertical_m: 0.5,
                 max_clock_error_s: Some(2.0E-9),
-                max_clock_jitter_s: Some(2.0E-9),
+                // real receivers: the stability is that of the oscillator, not of
+                // the estimate (see frozen_ppp_clock_consistency)
+                max_clock_jitter_s: Some(10.0E-9),
                 max_gdop: 5.0,
                 max_tdop: Some(3.0),
             },

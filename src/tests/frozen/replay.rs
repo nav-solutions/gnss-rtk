@@ -74,7 +74,10 @@ impl Replay {
     }
 }
 
-/// Replays the dataset, returns the [RunReport] (truth: rover antenna reference point).
+/// Replays the dataset, returns the [RunReport].
+///
+/// Truth: rover antenna reference point, in ITRF2014 for the absolute techniques
+/// (frame of the precise products), in ETRF2000 (frame of the base coordinates) for RTK.
 pub fn replay(opts: &Replay) -> RunReport {
     let data = opts.dataset.load();
     let frame = earth_frame();
@@ -95,7 +98,11 @@ pub fn replay(opts: &Replay) -> RunReport {
         constellations: opts.constellations.clone(),
     };
 
-    let truth = data.rover.arp_ecef_m();
+    let truth = if opts.rtk {
+        data.rover.arp_ecef_m()
+    } else {
+        data.rover.itrf2014_arp_ecef_m()
+    };
     let mut outcomes = Vec::with_capacity(data.rover.epochs.len());
 
     for (k, epoch) in data.rover.epochs.keys().enumerate() {

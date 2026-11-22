@@ -204,12 +204,13 @@ impl Simulator {
         self.inner.orbits.iter().find(|orb| orb.sv == sv)
     }
 
-    /// Satellite clock offset (s) at receiver time tag `t`, as provided to the solver.
-    /// Quantized to [Duration] resolution so truth and solver inputs are identical.
-    pub fn sat_clock_duration(&self, sv: SV, t: Epoch) -> Duration {
+    /// Satellite clock offset (s) at receiver time tag `t`, as provided to the solver
+    /// (full precision: precise clock products resolve 1E-12 s, far below the
+    /// 1 ns resolution of [Duration]).
+    pub fn sat_clock_s(&self, sv: SV, t: Epoch) -> f64 {
         let (a0, a1) = self.inner.sat_clock.get(&sv).copied().unwrap_or_default();
         let dt = self.seconds_since_start(t);
-        Duration::from_seconds(a0 + a1 * dt)
+        a0 + a1 * dt
     }
 
     /// Truth position of a station, `t_s` seconds after start
@@ -343,7 +344,7 @@ impl Simulator {
             shapiro_m,
             time_of_flight_s: tau,
             elevation_deg: elev_deg,
-            sat_clock_s: self.sat_clock_duration(sv, t).to_seconds(),
+            sat_clock_s: self.sat_clock_s(sv, t),
             tropo_m: self.tropo_delay_m(t, sv, &rx_m, elev_deg, az_deg),
             iono_l1_m: self.iono_delay_m(elev_deg, Carrier::L1.frequency_hz()),
             ambiguity_1: self.ambiguity(station, sv, false, t_tag_s),
@@ -504,8 +505,8 @@ pub struct SimSpacebornBias {
 impl SpacebornBias for SimSpacebornBias {
     fn clock_bias(&self, rtm: &BiasRuntime) -> SatelliteClockCorrection {
         // the simulated clocks already contain everything: no relativistic correction needed.
-        SatelliteClockCorrection::with_relativistic_correction(
-            self.sim.sat_clock_duration(rtm.sv, rtm.epoch),
+        SatelliteClockCorrection::with_relativistic_correction_s(
+            self.sim.sat_clock_s(rtm.sv, rtm.epoch),
         )
     }
 

@@ -5,7 +5,9 @@ use crate::prelude::TimeScale;
 
 mod dop;
 mod kalman;
+mod phase;
 mod postfit;
+mod ppp;
 mod ppp_ar;
 
 pub(crate) mod apriori;
@@ -20,8 +22,8 @@ use crate::{
     candidate::differences::Differences,
     constants::SPEED_OF_LIGHT_M_S,
     navigation::{
-        apriori::Apriori, dop::DilutionOfPrecision, kalman::Kalman, postfit::PostfitKf,
-        ppp_ar::ARSolver, state::State, sv::SVContribution,
+        apriori::Apriori, dop::DilutionOfPrecision, kalman::Kalman, phase::PhaseTracker,
+        postfit::PostfitKf, state::State, sv::SVContribution,
     },
     prelude::{Candidate, Config, Duration, Epoch, Error, Frame, Method, UserParameters, Vector3},
 };
@@ -119,8 +121,15 @@ pub(crate) struct Navigation {
     /// Q
     q_k: DMatrix<f64>,
 
-    /// Prefit
-    ar_prefit: Option<ARSolver>,
+    /// Carrier phase tracker (PPP)
+    tracker: PhaseTracker,
+
+    /// Nominal residual zenith wet delay (PPP), in meters
+    zwd_m: f64,
+
+    /// PPP inter-system biases: (constellation, ISB in m), in slot order.
+    /// The first constellation is the clock reference (no ISB state).
+    isb_systems: Vec<(crate::prelude::Constellation, f64)>,
 
     /// [Kalman]
     kalman: Kalman,
@@ -154,7 +163,9 @@ impl Navigation {
             postfit: None,
             prev_epoch: None,
             cfg: cfg.clone(),
-            ar_prefit: None,
+            tracker: PhaseTracker::default(),
+            zwd_m: 0.0,
+            isb_systems: Vec::new(),
             state: Default::default(),
             nominal: Default::default(),
             sv: Vec::with_capacity(8),
@@ -173,9 +184,9 @@ impl Navigation {
         self.sv.clear();
         self.kalman.reset();
 
-        if let Some(prefit) = &mut self.ar_prefit {
-            prefit.reset();
-        }
+        self.tracker.reset();
+        self.zwd_m = 0.0;
+        self.isb_systems.clear();
 
         if let Some(postfit) = &mut self.postfit {
             postfit.reset();
@@ -218,25 +229,24 @@ impl Navigation {
             None => Duration::ZERO,
         };
 
-        if !uses_rtk && self.cfg.method == Method::PPP && self.ar_prefit.is_none() {
-            self.ar_prefit = Some(ARSolver::new(self.cfg.clone(), self.frame));
-        }
-
-        if !uses_rtk {
-            if let Some(prefit) = &mut self.ar_prefit {
-                match prefit.run(epoch, params, initial_state, candidates, size) {
-                    Ok(_) => {},
-                    Err(e) => {
-                        error!("{epoch} - ppp prefit failed with {e}");
-                        return Err(Error::FloatAmbiguitiesSolving);
-                    },
-                }
-            }
-        }
+        let ppp = !uses_rtk && self.cfg.method == Method::PPP;
 
         if !self.kalman.initialized {
             self.kf_initialization(epoch, initial_state, candidates, size, &rtk)?;
+
+            if ppp {
+                self.ppp_initialize(epoch, candidates);
+            }
+        } else if ppp {
+            self.ppp_run(epoch, params, dt, initial_state, candidates, size)?;
         } else {
+            if self.kalman.covariance().nrows() > ndf {
+                // leaving PPP: drop the troposphere and ambiguity states
+                self.tracker.reset();
+                self.zwd_m = 0.0;
+                self.isb_systems.clear();
+            }
+
             // context switch (RTK <=> PPP) is allowed at any epoch
             self.kalman_dimension_mut(ndf);
 
@@ -318,8 +328,15 @@ impl Navigation {
         let mut contribution = SVContribution::default();
         contribution.sv = candidate.sv;
 
+        // absolute PPP is initialized on the code: code variances apply
+        let variance_method = if self.cfg.method == Method::PPP && rtk.is_none() {
+            Method::CPP
+        } else {
+            self.cfg.method
+        };
+
         let variance_m2 =
-            measurement_variance_m2(self.cfg.method, candidate.elevation_deg, rtk.is_some());
+            measurement_variance_m2(variance_method, candidate.elevation_deg, rtk.is_some());
 
         match rtk {
             Some(rtk) => {
@@ -365,28 +382,24 @@ impl Navigation {
                 })
             },
             None => {
+                // PPP initialization relies on the code (CPP) measurements,
+                // the phase is introduced by the PPP filter (see ppp.rs)
+                let cfg = if self.cfg.method == Method::PPP {
+                    let mut cfg = self.cfg.clone();
+                    cfg.method = Method::CPP;
+                    cfg
+                } else {
+                    self.cfg.clone()
+                };
+
                 let vec = candidate.ppp_vector_contribution(
-                    &self.cfg,
+                    &cfg,
                     false,
                     position_m,
                     &mut contribution,
                 )?;
 
-                let mut residual_m = vec.row_1;
-
-                if self.cfg.method == Method::PPP {
-                    // phase navigation requires the float ambiguities
-                    let prefit = self
-                        .ar_prefit
-                        .as_ref()
-                        .ok_or(Error::FloatAmbiguitiesSolving)?;
-
-                    let ambiguity_m = prefit
-                        .float_ambiguity_m(candidate.sv)
-                        .ok_or(Error::UnresolvedAmbiguity)?;
-
-                    residual_m -= ambiguity_m;
-                }
+                let residual_m = vec.row_1;
 
                 let h = candidate.ppp_matrix_contribution(&self.cfg, position_m);
 

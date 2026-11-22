@@ -141,7 +141,7 @@ Advantages:
 Disadvantages:
 
 - Less advanced than RTKlib
-    - Pure PPP is not possible yet, this solver is limited to RTK-PPP in case of PPP navigation.
+    - PPP navigation uses float ambiguities: integer ambiguity resolution (PPP-AR) is not supported yet.
 - Less feedback than RTKlib
     - Models and/or algorithms may be less effective
     - Need more feedback from both the community and other developpers.
@@ -191,7 +191,7 @@ Summary of supported modes:
 |------------|-------------------|--------|----------------|----------|
 | `PPP`      | `Solver::ppp_run` | CPP    |  OK            |  2/5     |
 |------------|-------------------|--------|----------------|----------|
-| `PPP`      | `Solver::ppp_run` | PPP    |  NOK           |  4/5     |
+| `PPP`      | `Solver::ppp_run` | PPP    |  OK (float)    |  4/5     |
 |------------|-------------------|--------|----------------|----------|
 
 NOK: unreleased, unavailable or untested. Will at best diverge, and most likely panic if you deploy this mode.
@@ -208,7 +208,7 @@ in nominal conditions, on simulated data (`src/tests/sim`) and on real data
 |----------|----------------------|------------|--------------------------|----------|--------------------|
 | SPP      | 5 m                  | 10 m       | 50 ns / 30 ns            | 5        | 3                  |
 | CPP      | 1 m                  | 2 m        | 10 ns / 10 ns            | 5        | 3                  |
-| PPP      | 0.3 m                | 0.5 m      | 2 ns / 2 ns              | 5        | 3                  |
+| PPP      | 0.3 m                | 0.5 m      | 2 ns / 10 ns             | 5        | 3                  |
 | RTK-SPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
 | RTK-CPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
 | RTK-PPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
@@ -216,17 +216,24 @@ in nominal conditions, on simulated data (`src/tests/sim`) and on real data
 - Errors are expressed in the local East / North / Up frame: ECEF axes mix horizontal
   and vertical errors depending on the latitude.
 - Clock: error against the truth when it is known (simulation), otherwise stability
-  of the estimate (maximal deviation from its linear trend, steered receivers).
+  of the estimate (maximal deviation from its linear trend, steered receivers). On real
+  data the stability is that of the receiver oscillator (~1 ns white noise for ESBC00DNK):
+  the PPP clock precision is verified by two independent estimates (GPS only, Galileo
+  only), which agree within 0.1 ns RMS over 1 h (`frozen_ppp_clock_consistency`).
 - Nominal conditions: static or low dynamics receiver, open sky, GDOP up to 5,
   ionosphere model for SPP, RTK baselines up to 65 km.
 - Convergence periods used by the tests: none in ideal conditions, 10' for static
-  geodetic receivers (CPP, RTK-SPP), 40' for RTK-CPP (iono free code noise).
-- PPP is the target of the ongoing work (its tests are ignored until it is released).
-  RTK-PPP does not resolve the phase ambiguities yet: its contract will be tightened
-  to the centimeter level.
+  geodetic receivers (CPP, RTK-SPP), 40' for RTK-CPP (iono free code noise), 30' for
+  the float PPP in simulation (10' / 1 h on the real data).
+- PPP and RTK-PPP do not resolve the phase ambiguities to integers yet: their contract
+  will be tightened to the centimeter level with PPP-AR.
 
 Measured on real data (ESBC00DNK / MOJN00DNK, 2020-06-25, 24 h, 3D RMS after 1 h):
-CPP 0.92 m (GPS), 0.79 m (Galileo); RTK (65 km baseline) 0.24 m (SPP), 0.30 m (CPP).
+CPP 0.34 m (GPS), 0.12 m (Galileo); float PPP 0.09 m (GPS, Galileo or both);
+RTK (65 km baseline) 0.24 m (SPP), 0.29 m (CPP). The absolute techniques are compared
+to the ITRF2014 coordinates of the station (frame of the precise orbits and clocks),
+RTK to the ETRF2000 coordinates of the RINEX header (frame of the base coordinates):
+both frames differ by 0.76 m in Denmark (2020).
 Run `cargo test --release frozen_performance_report -- --ignored --nocapture` for the
 complete table.
 
@@ -236,6 +243,35 @@ Known derogations (expressed as ignored `target_*` tests):
   which is not rejected (no RAIM yet), and the test environment has no ionosphere model.
 - CPP mixing GPS and Galileo: the inter-system bias is not estimated (single receiver clock).
 - RTK with BeiDou only: broadcast orbits / clocks and 4 to 6 satellites.
+- PPP mixing BeiDou (broadcast orbits / clocks) with GPS and Galileo (precise products),
+  1 h dataset.
+
+Precise Point Positioning
+=========================
+
+`Method::PPP` (with `Solver::ppp`) runs a single navigation filter that processes the
+iono free code and phase of every satellite:
+
+```text
+state = [ position, receiver clock, zenith wet delay, inter-system biases, N_1 ... N_n ]
+```
+
+- The solution starts at the CPP accuracy (the ambiguities are unknown) and converges
+  continuously to the PPP accuracy as the geometry changes: no mode switch, no second
+  filter. Typical convergence below 10 cm (simulation): ~20' (GPS + Galileo) to ~35'
+  (one constellation) for a static geodetic receiver.
+- Phase tracking: one float iono free ambiguity per continuous phase arc. Arcs start
+  when satellites rise, end when they set or after a data gap, and restart on cycle
+  slips (geometry free jump with respect to its ionosphere prediction, Melbourne-Wübbena
+  jump, or innovation inconsistent with the filter covariance).
+- The receiver clock is estimated as a white noise process (steered or free running
+  clocks), one inter-system bias per secondary constellation (GPS is the reference).
+- The satellite clocks must be provided with their full precision: build them with
+  `SatelliteClockCorrection::with_relativistic_correction_s` (seconds, `f64`), the
+  `Duration` constructors truncate to the nanosecond (0.3 m), which is fine for code
+  navigation but ruins phase navigation.
+- Integer ambiguity resolution (PPP-AR) requires satellite phase biases (not part of
+  the `SpacebornBias` interface yet), see the `target_ppp_ar_*` test.
 
 Solver, strategies and API
 ==========================

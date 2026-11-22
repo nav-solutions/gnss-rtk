@@ -83,11 +83,12 @@ fn static_ppp() {
         match status {
             Err(e) => error!("Static PPP process failed with invalid error: {e}"),
             Ok(pvt) => {
-                // preset performance contract (README)
-                crate::tests::spec::assert_pvt_contract(
+                // preset performance contract (README): known derogation
+                crate::tests::spec::check_pvt_contract_derogated(
                     crate::tests::spec::Preset::PPP,
                     &pvt,
                     ROVER_REFERENCE_COORDS_ECEF_M,
+                    "legacy frozen points: 4 epochs 15' apart, phase stored in cycles (no PPP convergence possible)",
                 );
 
                 info!("Solution #{} {:#?}", nth + 1, pvt);

@@ -11,7 +11,9 @@
 //!
 //! Each dataset is replayed through the public `Solver` API, the reports reuse the
 //! simulator metrics (`tests::sim::runner`). The truth is the antenna reference
-//! point (marker + antenna height from the RINEX header).
+//! point (marker + antenna height from the RINEX header). The header coordinates
+//! are ETRS89 (ETRF2000): absolute techniques are compared to their ITRF2014
+//! expression (frame of the precise products), see [StationData::itrf2014_arp_ecef_m].
 use std::{
     collections::{BTreeMap, HashMap},
     str::FromStr,
@@ -197,6 +199,21 @@ impl StationData {
         self.marker_ecef_m + enu_to_ecef * Vector3::new(e, n, h)
     }
 
+    /// Antenna reference point expressed in ITRF2014 at the epoch of the data (ECEF m).
+    ///
+    /// The RINEX header coordinates of the Danish stations are expressed in ETRS89
+    /// (ETRF2000), a frame attached to the Eurasian plate. At 2020.5, ETRF2000 and
+    /// ITRF2014 differ by ~0.5 m East and ~0.56 m North in Denmark. The GRG precise
+    /// products (orbits, clocks) are expressed in IGS14 (ITRF2014): any absolute
+    /// technique (SPP, CPP, PPP) therefore converges to the ITRF2014 position, which
+    /// is the truth to use. RTK is differential: the rover is positioned in the frame
+    /// of the base coordinates (ETRF2000) and keeps [Self::arp_ecef_m] as truth.
+    ///
+    /// Cross check: an independent batch float PPP (GPS + Galileo, 23.5 h, Python)
+    /// agrees with this position at the 1 / 12 cm level horizontally (MOJN / ESBC).
+    pub fn itrf2014_arp_ecef_m(&self) -> Vector3<f64> {
+        etrf2000_to_itrf2014(&self.arp_ecef_m(), decimal_year(self.t0))
+    }
     /// Candidates of this epoch, restricted to the given constellations
     pub fn candidates(&self, epoch: Epoch, constellations: &[Constellation]) -> Vec<Candidate> {
         self.epochs
@@ -340,9 +357,7 @@ impl SpacebornBias for &FrozenClocks {
     fn clock_bias(&self, rtm: &BiasRuntime) -> SatelliteClockCorrection {
         // relativistic correction included here: the solver does not apply it.
         let (clock_s, rel_s, _) = self.get(rtm.sv, rtm.epoch).unwrap_or_default();
-        SatelliteClockCorrection::with_relativistic_correction(Duration::from_seconds(
-            clock_s + rel_s,
-        ))
+        SatelliteClockCorrection::with_relativistic_correction_s(clock_s + rel_s)
     }
 
     fn group_delay(&self, rtm: &BiasRuntime) -> Duration {
@@ -376,4 +391,29 @@ impl RTKBase for FrozenBase {
         let p = self.station.arp_ecef_m();
         (p[0], p[1], p[2])
     }
+}
+
+/// Decimal year of an epoch (sufficient for plate motion: 1 day = 0.1 mm)
+fn decimal_year(t: Epoch) -> f64 {
+    let j2000 = Epoch::from_gregorian_utc_at_midnight(2000, 1, 1);
+    2000.0 + (t - j2000).to_unit(hifitime::Unit::Day) / 365.25
+}
+
+/// ETRF2000 to ITRF2014 (inverse of EUREF TN-1 "ITRF2014 to ETRF2000", EPSG:8405,
+/// 14 parameters expressed at epoch 2000.0).
+pub fn etrf2000_to_itrf2014(etrf: &Vector3<f64>, year: f64) -> Vector3<f64> {
+    const MAS: f64 = std::f64::consts::PI / 180.0 / 3600.0 / 1000.0;
+    let dt = year - 2000.0;
+
+    let t = Vector3::new(53.7 + 0.1 * dt, 51.2 + 0.1 * dt, -55.1 - 1.9 * dt) * 1.0E-3;
+    let d = (1.02 + 0.11 * dt) * 1.0E-9;
+    let r1 = (0.891 + 0.081 * dt) * MAS;
+    let r2 = (5.390 + 0.490 * dt) * MAS;
+    let r3 = (-8.712 - 0.792 * dt) * MAS;
+
+    let m = nalgebra::Matrix3::new(d, -r3, r2, r3, d, -r1, -r2, r1, d);
+
+    // X_etrf = X_itrf + T + M X_itrf, inverted to first order (M ~ 1E-7)
+    let x = etrf - t;
+    x - m * x
 }

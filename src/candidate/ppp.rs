@@ -86,7 +86,7 @@ impl Candidate {
             _ => None,
         };
 
-        bias_m -= self.clock_corr.duration.to_seconds() * SPEED_OF_LIGHT_M_S;
+        bias_m -= self.clock_corr.seconds() * SPEED_OF_LIGHT_M_S;
 
         let sys_t = self.system_correction.unwrap_or(Duration::ZERO);
 
