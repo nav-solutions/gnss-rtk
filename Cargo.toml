@@ -11,7 +11,9 @@ categories = ["science", "science::geo"]
 edition = "2024"
 readme = "README.md"
 exclude = [
-    "examples_need_update/*",
+  "src/tests/",
+  "scripts/",
+  "tools/"
 ]
 
 [package.metadata]
