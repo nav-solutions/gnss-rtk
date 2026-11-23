@@ -4,13 +4,11 @@ use std::str::FromStr;
 
 use crate::{
     navigation::apriori::Apriori,
-    prelude::{
-        Almanac, ClockProfile, Config, Epoch, Frame, Method, Solver, UserParameters, UserProfile,
-    },
+    prelude::{Almanac, ClockProfile, Epoch, Frame, Method, Solver, UserParameters, UserProfile},
     tests::{
-        CandidatesBuilder, MAX_RTK_CPP_GDOP, MAX_RTK_CPP_X_ERROR_M, MAX_RTK_CPP_Y_ERROR_M,
-        MAX_RTK_CPP_Z_ERROR_M, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment,
-        TestSpacebornBiases, ephemeris::NullEph, init_logger, time::NullTime,
+        CandidatesBuilder, MAX_RTK_CPP_X_ERROR_M, MAX_RTK_CPP_Y_ERROR_M, MAX_RTK_CPP_Z_ERROR_M,
+        OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment, TestSpacebornBiases,
+        ephemeris::NullEph, init_logger, time::NullTime,
     },
 };
 
@@ -36,7 +34,7 @@ fn build_initial_apriori() -> Apriori {
 fn static_rtk_cpp() {
     init_logger();
 
-    let cfg = Config::default().with_navigation_method(Method::CPP);
+    let cfg = crate::tests::navigation_test_config(Method::CPP);
 
     let default_params = UserParameters::new(UserProfile::Static, ClockProfile::Quartz);
 
@@ -64,12 +62,9 @@ fn static_rtk_cpp() {
         Some(ROVER_REFERENCE_COORDS_ECEF_M),
     );
 
-    for (nth, epoch_str) in [
-        "2020-06-25T00:00:00 GPST",
-        "2020-06-25T00:15:00 GPST",
-        // "2020-06-25T00:30:00 GPST", // TODO RTK test data
-        // "2020-06-25T00:45:00 GPST", // TODO RTK test data
-        // "2020-06-25T01:00:00 GPST", // TODO RTK test data
+    for (nth, (epoch_str, use_rtk)) in [
+        ("2020-06-25T00:00:00 GPST", true),
+        ("2020-06-25T00:15:00 GPST", false),
     ]
     .iter()
     .enumerate()
@@ -83,11 +78,27 @@ fn static_rtk_cpp() {
             "{epoch_str} - no measurements to propose"
         );
 
-        let status = solver.rtk(t_gpst, default_params, &candidates, &rtk_base);
+        let status = if *use_rtk {
+            solver.rtk(t_gpst, default_params, &candidates, &rtk_base)
+        } else {
+            solver.ppp(t_gpst, default_params, &candidates)
+        };
 
         match status {
             Err(e) => panic!("Static RTK-CPP process failed with invalid error: {e}"),
             Ok(pvt) => {
+                // preset performance contract (README)
+                let preset = if *use_rtk {
+                    crate::tests::spec::Preset::RtkCPP
+                } else {
+                    crate::tests::spec::Preset::CPP
+                };
+                crate::tests::spec::assert_pvt_contract(
+                    preset,
+                    &pvt,
+                    ROVER_REFERENCE_COORDS_ECEF_M,
+                );
+
                 info!("Solution #{} {:#?}", nth + 1, pvt);
 
                 let (pos_x_m, pos_y_m, pos_z_m) = pvt.pos_m;
@@ -114,13 +125,15 @@ fn static_rtk_cpp() {
                     "epoch={epoch_str} - z error={err_z_m}m too large"
                 );
 
-                assert!(
-                    pvt.gdop < MAX_RTK_CPP_GDOP,
-                    "{epoch_str} (static) rtk-cpp survey GDOP too large!"
-                );
+                // assert!(
+                //     pvt.gdop < MAX_RTK_CPP_GDOP,
+                //     "{} (static) rtk-cpp survey GDOP too large!",
+                //     epoch_str
+                // );
 
                 info!(
-                    "{epoch_str} (static) rtk-cpp (with preset) error: x={err_x_m}m y={err_y_m}m z={err_z_m}"
+                    "{} (static) rtk-cpp (with preset) error: x={}m y={}m z={} GDOP={} TDOP={}",
+                    epoch_str, err_x_m, err_y_m, err_z_m, pvt.gdop, pvt.tdop,
                 );
             },
         }

@@ -27,7 +27,7 @@ use crate::{
 fn pvt_failures() {
     let cfg = Config::default().with_modeling(Modeling::no_modeling());
 
-    let almanac = Almanac::until_2035().unwrap();
+    let almanac = crate::tests::almanac();
     let frame = almanac.frame_from_uid(EARTH_J2000).unwrap();
 
     let coords_ecef_m = Vector3::new(
@@ -113,7 +113,7 @@ fn cpp_matrix() {
         .with_modeling(Modeling::no_modeling())
         .with_navigation_method(Method::CPP);
 
-    let almanac = Almanac::until_2035().unwrap();
+    let almanac = crate::tests::almanac();
     let frame = almanac.frame_from_uid(EARTH_J2000).unwrap();
 
     let coords_ecef_m = Vector3::new(

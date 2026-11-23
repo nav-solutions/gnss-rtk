@@ -4,10 +4,11 @@ use std::str::FromStr;
 
 use crate::{
     navigation::apriori::Apriori,
-    prelude::{Almanac, Config, Epoch, Frame, Method, Solver, UserParameters},
+    prelude::{Almanac, ClockProfile, Epoch, Frame, Method, Solver, UserParameters, UserProfile},
     tests::{
-        ephemeris::NullEph, init_logger, time::NullTime, CandidatesBuilder, OrbitsData,
-        TestEnvironment, TestSpacebornBiases, ROVER_REFERENCE_COORDS_ECEF_M,
+        CandidatesBuilder, MAX_RTK_CPP_GDOP, MAX_RTK_CPP_X_ERROR_M, MAX_RTK_CPP_Y_ERROR_M,
+        MAX_RTK_CPP_Z_ERROR_M, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment,
+        TestSpacebornBiases, ephemeris::NullEph, init_logger, time::NullTime,
     },
 };
 
@@ -30,13 +31,12 @@ fn build_initial_apriori() -> Apriori {
 }
 
 #[test]
-#[ignore]
-fn static_ppp_ar() {
+fn static_rtk_cpp() {
     init_logger();
 
-    let cfg = Config::default().with_navigation_method(Method::PPP_AR);
+    let cfg = crate::tests::navigation_test_config(Method::CPP);
 
-    let default_params = UserParameters::default();
+    let default_params = UserParameters::new(UserProfile::Static, ClockProfile::Quartz);
 
     let almanac = build_almanac();
     let earth_frame = build_earth_frame();
@@ -47,6 +47,8 @@ fn static_ppp_ar() {
     let space_biases = TestSpacebornBiases::build();
 
     let orbits_data = OrbitsData::new(earth_frame);
+
+    let rtk_base = CandidatesBuilder::build_rtk_base();
 
     let mut solver = Solver::new(
         almanac,
@@ -63,9 +65,9 @@ fn static_ppp_ar() {
     for (nth, epoch_str) in [
         "2020-06-25T00:00:00 GPST",
         "2020-06-25T00:15:00 GPST",
-        // "2020-06-25T00:30:00 GPST",
-        // "2020-06-25T00:45:00 GPST",
-        // "2020-06-25T01:00:00 GPST",
+        // "2020-06-25T00:30:00 GPST", // TODO RTK test data
+        // "2020-06-25T00:45:00 GPST", // TODO RTK test data
+        // "2020-06-25T01:00:00 GPST", // TODO RTK test data
     ]
     .iter()
     .enumerate()
@@ -75,16 +77,22 @@ fn static_ppp_ar() {
         let candidates = CandidatesBuilder::build_rover_at(t_gpst);
 
         assert!(
-            candidates.len() > 0,
-            "no measurements to propose at \"{}\"",
-            epoch_str
+            !candidates.is_empty(),
+            "{epoch_str} - no measurements to propose"
         );
 
-        let status = solver.ppp_solving(t_gpst, default_params, &candidates);
+        let status = solver.rtk(t_gpst, default_params, &candidates, &rtk_base);
 
         match status {
-            Err(e) => panic!("Static PPP-AR process failed with invalid error: {}", e),
+            Err(e) => panic!("Static RTK-CPP process failed with invalid error: {e}"),
             Ok(pvt) => {
+                // preset performance contract (README)
+                crate::tests::spec::assert_pvt_contract(
+                    crate::tests::spec::Preset::RtkCPP,
+                    &pvt,
+                    ROVER_REFERENCE_COORDS_ECEF_M,
+                );
+
                 info!("Solution #{} {:#?}", nth + 1, pvt);
 
                 let (pos_x_m, pos_y_m, pos_z_m) = pvt.pos_m;
@@ -97,29 +105,27 @@ fn static_ppp_ar() {
                 );
 
                 assert!(
-                    err_x_m < 100.0,
-                    "epoch={} - x error={}m too large",
-                    epoch_str,
-                    err_x_m
+                    err_x_m < MAX_RTK_CPP_X_ERROR_M,
+                    "epoch={epoch_str} - x error={err_x_m}m too large"
                 );
 
                 assert!(
-                    err_y_m < 100.0,
-                    "epoch={} - y error={}m too large",
-                    epoch_str,
-                    err_y_m
+                    err_y_m < MAX_RTK_CPP_Y_ERROR_M,
+                    "epoch={epoch_str} - y error={err_y_m}m too large"
                 );
 
                 assert!(
-                    err_z_m < 100.0,
-                    "epoch={} - z error={}m too large",
-                    epoch_str,
-                    err_z_m
+                    err_z_m < MAX_RTK_CPP_Z_ERROR_M,
+                    "epoch={epoch_str} - z error={err_z_m}m too large"
+                );
+
+                assert!(
+                    pvt.gdop < MAX_RTK_CPP_GDOP,
+                    "{epoch_str} (static) rtk-cpp survey GDOP too large!"
                 );
 
                 info!(
-                    "{} (static) ppp-ar (with preset) error: x={}m y={}m z={}",
-                    epoch_str, err_x_m, err_y_m, err_z_m
+                    "{epoch_str} (static) rtk-cpp (with preset) error: x={err_x_m}m y={err_y_m}m z={err_z_m}"
                 );
             },
         }

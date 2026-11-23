@@ -10,7 +10,7 @@ use crate::{
     candidate::Candidate,
     cfg::Config,
     ephemeris::EphemerisSource,
-    navigation::{Navigation, apriori::Apriori, solutions::PVTSolution, state::State},
+    navigation::{Navigation, RtkContext, apriori::Apriori, solutions::PVTSolution, state::State},
     orbit::OrbitSource,
     pool::Pool,
     prelude::{EnvironmentalBias, Epoch, Error, Rc, SpacebornBias, UserParameters},
@@ -44,8 +44,6 @@ pub struct Solver<
 
     /// Base pool
     base_pool: Pool<EPH, ORB, EB, SB>,
-
-    /// PPP prefit
 
     /// [Navigation] solver
     navigation: Navigation,
@@ -264,7 +262,15 @@ impl<
             corrected
         };
 
-        self.rover_pool.orbital_states_fit("rover");
+        // latest receiver clock estimate (geometric time of flight)
+        let rx_clock_offset_s = if self.navigation.is_initialized() && !uses_rtk {
+            self.navigation.nominal.clock_profile_s().0
+        } else {
+            0.0
+        };
+
+        self.rover_pool
+            .orbital_states_fit_with_clock("rover", rx_clock_offset_s);
 
         if uses_rtk {
             self.base_pool.orbital_states_fit(&rtk_base_name);
@@ -272,7 +278,7 @@ impl<
 
         // current state
         let state = if self.navigation.is_initialized() {
-            self.navigation.state.with_epoch(epoch)
+            self.navigation.nominal.with_epoch(epoch)
         } else {
             match self.initial_ecef_m {
                 Some(x0_y0_z0_m) => {
@@ -335,6 +341,33 @@ impl<
             return Err(Error::NotEnoughPostFitCandidates);
         }
 
+        let rtk_context = match &double_differences {
+            Some(double_differences) => {
+                let rover_pivot = self
+                    .rover_pool
+                    .pivot
+                    .as_ref()
+                    .ok_or(Error::SdPivotSatellite)?;
+
+                let base_pivot = self
+                    .base_pool
+                    .pivot
+                    .as_ref()
+                    .ok_or(Error::SdPivotSatellite)?;
+
+                let (x0, y0, z0) = rtk_base.reference_position_ecef_m(epoch);
+
+                Some(RtkContext {
+                    base_position_ecef_m: Vector3::new(x0, y0, z0),
+                    rover_pivot,
+                    base_pivot,
+                    base_candidates: self.base_pool.candidates(),
+                    double_differences,
+                })
+            },
+            None => None,
+        };
+
         // Solving attempt
         match self.navigation.solve(
             epoch,
@@ -342,10 +375,7 @@ impl<
             &state,
             self.rover_pool.candidates(),
             pool_size,
-            uses_rtk,
-            rtk_base,
-            &self.rover_pool.pivot_position_ecef_m,
-            &double_differences,
+            rtk_context,
         ) {
             Ok(_) => {
                 info!("{epoch} - sucess");
@@ -367,7 +397,8 @@ impl<
 
         // Special "open loop" option
         if self.cfg.solver.open_loop {
-            self.navigation.state = state;
+            self.navigation.state = state.clone();
+            self.navigation.nominal = state;
         }
 
         Ok(solution)

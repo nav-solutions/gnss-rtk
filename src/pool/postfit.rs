@@ -28,6 +28,14 @@ use hifitime::Unit;
 
 use anise::errors::AlmanacResult;
 
+/// Relativistic (Shapiro) signal path delay (m), IS-GPS-200 / IERS conventions:
+/// dr = 2 mu / c² . ln((r_sat + r_rx + rho) / (r_sat + r_rx - rho)),
+/// with r_sat, r_rx geocentric distances and rho the satellite to receiver distance.
+pub(crate) fn shapiro_delay_m(r_sat_m: f64, r_rx_m: f64, rho_m: f64) -> f64 {
+    2.0 * EARTH_GRAVITATION_MU_M3_S2 / SPEED_OF_LIGHT_M_S / SPEED_OF_LIGHT_M_S
+        * ((r_sat_m + r_rx_m + rho_m) / (r_sat_m + r_rx_m - rho_m)).ln()
+}
+
 impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: SpacebornBias>
     Pool<EPH, ORB, EB, SB>
 {
@@ -293,11 +301,14 @@ impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: Spacebor
             let r_0 = (x0_m.powi(2) + y0_m.powi(2) + z0_m.powi(2)).sqrt();
             let r_sat = (r_sat_m[0].powi(2) + r_sat_m[1].powi(2) + r_sat_m[2].powi(2)).sqrt();
 
-            let r_sat_0 = r_0 - r_sat;
+            // satellite to receiver distance
+            let r_sat_0 = ((r_sat_m[0] - x0_m).powi(2)
+                + (r_sat_m[1] - y0_m).powi(2)
+                + (r_sat_m[2] - z0_m).powi(2))
+            .sqrt();
 
             if self.cfg.modeling.relativistic_path_range {
-                let dr = 2.0 * EARTH_GRAVITATION_MU_M3_S2 / SPEED_OF_LIGHT_M_S / SPEED_OF_LIGHT_M_S
-                    * ((r_sat + r_0 + r_sat_0) / (r_sat + r_0 - r_sat_0)).ln();
+                let dr = shapiro_delay_m(r_sat, r_0, r_sat_0);
 
                 debug!("{}({}) {} - rel. path range={}m", cd.epoch, cd.sv, name, dr);
 
@@ -387,6 +398,8 @@ impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: Spacebor
             * 1.0E3;
 
         self.pivot_position_ecef_m = Some((pos_vel[0], pos_vel[1], pos_vel[2]));
+        self.pivot = Some(mob_pivot.clone());
+        base.pivot = Some(base_pivot.clone());
 
         // DD
         let double_diff = self
@@ -402,5 +415,24 @@ impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: Spacebor
         }
 
         Ok(double_diff)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::shapiro_delay_m;
+
+    #[test]
+    fn shapiro_delay_magnitude() {
+        // GPS satellite at zenith / at the horizon, receiver on the ground:
+        // the Shapiro delay ranges from ~1.3 cm to ~1.9 cm.
+        let (r_sat, r_rx) = (26_560_000.0, 6_371_000.0);
+
+        let zenith = shapiro_delay_m(r_sat, r_rx, r_sat - r_rx);
+        let horizon = shapiro_delay_m(r_sat, r_rx, (r_sat * r_sat - r_rx * r_rx).sqrt());
+
+        assert!(zenith > 0.012 && zenith < 0.015, "zenith={zenith}");
+        assert!(horizon > 0.017 && horizon < 0.021, "horizon={horizon}");
+        assert!(horizon > zenith);
     }
 }

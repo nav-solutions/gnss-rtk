@@ -1,6 +1,7 @@
 use crate::{
     bancroft::Bancroft,
-    prelude::{Epoch, Frame, OrbitSource, SpacebornBias},
+    constants::{EARTH_ANGULAR_VEL_RAD, SPEED_OF_LIGHT_M_S},
+    prelude::{Duration, Epoch, Frame, Orbit, OrbitSource, SpacebornBias},
     tests::{
         CandidatesBuilder, MAX_SURVEY_BANCROFT_X_ERROR_M, MAX_SURVEY_BANCROFT_Y_ERROR_M,
         MAX_SURVEY_BANCROFT_Z_ERROR_M, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M,
@@ -41,18 +42,37 @@ fn bancroft_gpst() {
         let mut pool = CandidatesBuilder::build_rover_at(epoch);
 
         for cd in pool.iter_mut() {
-            let state = orbits_data
-                .state_at(cd.epoch, cd.sv, earth_frame)
-                .unwrap_or_else(|| {
-                    panic!("{}({}) - orbital state not defined", cd.epoch, cd.sv);
-                });
-
-            cd.orbit = Some(state);
-
             let rtm = cd.to_partial_bias_runtime();
 
             cd.clock_corr = space_biases.clock_bias(&rtm);
             cd.tgd = space_biases.group_delay(&rtm);
+
+            // orbital state at transmission time, expressed in the earth fixed
+            // frame at reception time (Sagnac), like the solver does.
+            let (_, pr_m) = cd
+                .l1_pseudo_range()
+                .unwrap_or_else(|| panic!("{}({}) - missing L1 pseudo range", cd.epoch, cd.sv));
+
+            let time_of_flight_s = pr_m / SPEED_OF_LIGHT_M_S;
+
+            let t_tx = cd.epoch - Duration::from_seconds(time_of_flight_s) - cd.clock_corr.duration;
+
+            let state = orbits_data
+                .state_at(t_tx, cd.sv, earth_frame)
+                .unwrap_or_else(|| {
+                    panic!("{}({}) - orbital state not defined", cd.epoch, cd.sv);
+                });
+
+            let pos_km = state.to_cartesian_pos_vel();
+            let (s, c) = (EARTH_ANGULAR_VEL_RAD * time_of_flight_s).sin_cos();
+
+            cd.orbit = Some(Orbit::from_position(
+                c * pos_km[0] + s * pos_km[1],
+                -s * pos_km[0] + c * pos_km[1],
+                pos_km[2],
+                cd.epoch,
+                earth_frame,
+            ));
         }
 
         let solver = Bancroft::new(&pool)

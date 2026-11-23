@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 #[test]
 fn state_initialization() {
-    let almanac = Almanac::until_2035().unwrap();
+    let almanac = crate::tests::almanac();
     let frame = almanac.frame_from_uid(EARTH_J2000).unwrap();
 
     let t0 = Epoch::from_str(J2020_06_25_GPS_EPOCHS[0]).unwrap();

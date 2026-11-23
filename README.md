@@ -89,6 +89,65 @@ GNSS-RTK is currently limited to ground navigation on planet Earth. Although it 
 make it more abstract and suitable for navigation on other planets, it is not scheduled as of today.
 If you want to this happen, feel free to open discussions.
 
+Reference applications
+======================
+
+List of applications that use this solver as their navigation core to obtain the P.V.T solution:
+
+- [Real-time I/Q streams (RTL-SDR) or post-processed I/Q recordings](https://github.com/mx4/gnss-rcv)
+    - Application to GPS L1 C/A
+    - Application to QZSS L1
+    - Application to Galileo E1B
+    - Currently limited to SPP strategy: single signal mono channel system
+- [RINEX-Cli (command line) hosted in this framework](https://github.com/nav-solutions/rinex-cli)
+    - RINEX (post processing) application
+    - Application to 4D P.V.T solutions solving
+    - Application to CGGTTS (timing) solutions solving
+
+Pros & Cons
+===========
+
+Advantages:
+
+- Easy to use & deploy, compared to task complexity
+- High level configuration 
+    - meaningful parameters, user friendly
+    - Configuration script can be kept to a minimum while obtaining
+    good performances
+    - Configuration preset is easier than RTKlib
+- Advanced configuration 
+    - Like RTKLib, it is possible to tweak any parameter here
+- Teaching material and learning experience
+    - Because the configuration preset is easy to manipulate,
+    it is easy to use it to emphasize or observe the contribution of each physical parameter
+- Single or Multi signal
+    - This solver can operate with a single or mixed signals, including
+    signal variations (real time compatible)
+    - User preference should be possible
+- User application agnostic
+    - This solver is compatible with both real-time processing and post-processing
+    - In particular, the solver can work on any data stream, as long as the user
+    fill the requirements imposed by the solver task (physics) and match the proposed interfaces.
+- Context switch:
+    - Strategy, context (input stream) or configuration preset can vary between epochs
+    and does not have to be fixed at deploy time: this solver is compatible with real-time applications
+- Great timescales support and advanced timing topics
+    - This solver allows to navigate in any of the supported timescales
+    - Express solution in any timescale: the solver will apply
+    the correction from the GNSS timescale to the desired timescale.
+    - Precise correction: if the user provides precise corrections, the solver will take that into account
+    either in the solving process or when converting to the desired timescale
+
+Disadvantages:
+
+- Less advanced than RTKlib
+    - PPP navigation uses float ambiguities: integer ambiguity resolution (PPP-AR) is not supported yet.
+- Less feedback than RTKlib
+    - Models and/or algorithms may be less effective
+    - Need more feedback from both the community and other developpers.
+    In particular, the solver has been tested thoroughly against static applications,
+    and few pedestrian profiles. It has barely been used with roaming devices and fast targets.
+
 Summary
 =======
 
@@ -132,10 +191,101 @@ Summary of supported modes:
 |------------|-------------------|--------|----------------|----------|
 | `PPP`      | `Solver::ppp_run` | CPP    |  OK            |  2/5     |
 |------------|-------------------|--------|----------------|----------|
-| `PPP`      | `Solver::ppp_run` | PPP    |  NOK           |  4/5     |
+| `PPP`      | `Solver::ppp_run` | PPP    |  OK (float)    |  4/5     |
 |------------|-------------------|--------|----------------|----------|
 
 NOK: unreleased, unavailable or untested. Will at best diverge, and most likely panic if you deploy this mode.
+
+Performance contract
+====================
+
+Each preset comes with a minimal performance, checked at every epoch (after the
+convergence period of the scenario) by every test that runs the navigation solver
+in nominal conditions, on simulated data (`src/tests/sim`) and on real data
+(`src/tests/frozen`, `src/tests/{spp,cpp,rtk}`):
+
+| Preset   | max \|East\|, \|North\| | max \|Up\| | Clock: truth / stability | max GDOP | max TDOP           |
+|----------|----------------------|------------|--------------------------|----------|--------------------|
+| SPP      | 5 m                  | 10 m       | 50 ns / 30 ns            | 5        | 3                  |
+| CPP      | 1 m                  | 2 m        | 10 ns / 10 ns            | 5        | 3                  |
+| PPP      | 0.3 m                | 0.5 m      | 2 ns / 10 ns             | 5        | 3                  |
+| RTK-SPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
+| RTK-CPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
+| RTK-PPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
+
+Once converged (steady state), the float PPP must comply with a tighter contract:
+
+| Preset            | max \|East\|, \|North\| | max \|Up\| | Clock: truth / stability | max GDOP | max TDOP |
+|-------------------|----------------------|------------|--------------------------|----------|----------|
+| PPP, steady state | 0.10 m               | 0.20 m     | 0.5 ns / 10 ns           | 5        | 3        |
+
+- Steady state: 1 h after the start (or after a reset) for a static geodetic receiver,
+  30 s sampling, GPS and / or Galileo with precise orbits and clocks.
+- Measured maxima in steady state: 5 cm / 6 cm / 0.3 ns in simulation (static, kinematic,
+  cycle slips, outages, rising and setting satellites), 7 cm / 15 cm on real data
+  (ESBC00DNK, 23 h).
+- Not modeled yet: solid earth tides, antenna phase center offsets and variations,
+  integer ambiguities (PPP-AR). They are the next steps towards the centimeter level.
+
+- Errors are expressed in the local East / North / Up frame: ECEF axes mix horizontal
+  and vertical errors depending on the latitude.
+- Clock: error against the truth when it is known (simulation), otherwise stability
+  of the estimate (maximal deviation from its linear trend, steered receivers). On real
+  data the stability is that of the receiver oscillator (~1 ns white noise for ESBC00DNK):
+  the PPP clock precision is verified by two independent estimates (GPS only, Galileo
+  only), which agree within 0.1 ns RMS over 1 h (`frozen_ppp_clock_consistency`).
+- Nominal conditions: static or low dynamics receiver, open sky, GDOP up to 5,
+  ionosphere model for SPP, RTK baselines up to 65 km.
+- Convergence periods used by the tests: none in ideal conditions, 10' for static
+  geodetic receivers (CPP, RTK-SPP), 40' for RTK-CPP (iono free code noise), 30' for
+  the float PPP in simulation (10' / 1 h on the real data).
+- PPP and RTK-PPP do not resolve the phase ambiguities to integers yet: their contract
+  will be tightened to the centimeter level with PPP-AR.
+
+Measured on real data (ESBC00DNK / MOJN00DNK, 2020-06-25, 24 h, 3D RMS after 1 h):
+CPP 0.34 m (GPS), 0.12 m (Galileo); float PPP 0.09 m (GPS, Galileo or both);
+RTK (65 km baseline) 0.24 m (SPP), 0.29 m (CPP). The absolute techniques are compared
+to the ITRF2014 coordinates of the station (frame of the precise orbits and clocks),
+RTK to the ETRF2000 coordinates of the RINEX header (frame of the base coordinates):
+both frames differ by 0.76 m in Denmark (2020).
+Run `cargo test --release frozen_performance_report -- --ignored --nocapture` for the
+complete table.
+
+Known derogations (expressed as ignored `target_*` tests):
+
+- SPP with Galileo: one satellite (E24) exhibits a ~12 m E1 code bias in the test data,
+  which is not rejected (no RAIM yet), and the test environment has no ionosphere model.
+- CPP mixing GPS and Galileo: the inter-system bias is not estimated (single receiver clock).
+- RTK with BeiDou only: broadcast orbits / clocks and 4 to 6 satellites.
+- PPP mixing BeiDou (broadcast orbits / clocks) with GPS and Galileo (precise products),
+  1 h dataset.
+
+Precise Point Positioning
+=========================
+
+`Method::PPP` (with `Solver::ppp`) runs a single navigation filter that processes the
+iono free code and phase of every satellite:
+
+```text
+state = [ position, receiver clock, zenith wet delay, inter-system biases, N_1 ... N_n ]
+```
+
+- The solution starts at the CPP accuracy (the ambiguities are unknown) and converges
+  continuously to the PPP accuracy as the geometry changes: no mode switch, no second
+  filter. Typical convergence below 10 cm (simulation): ~20' (GPS + Galileo) to ~35'
+  (one constellation) for a static geodetic receiver.
+- Phase tracking: one float iono free ambiguity per continuous phase arc. Arcs start
+  when satellites rise, end when they set or after a data gap, and restart on cycle
+  slips (geometry free jump with respect to its ionosphere prediction, Melbourne-Wübbena
+  jump, or innovation inconsistent with the filter covariance).
+- The receiver clock is estimated as a white noise process (steered or free running
+  clocks), one inter-system bias per secondary constellation (GPS is the reference).
+- The satellite clocks must be provided with their full precision: build them with
+  `SatelliteClockCorrection::with_relativistic_correction_s` (seconds, `f64`), the
+  `Duration` constructors truncate to the nanosecond (0.3 m), which is fine for code
+  navigation but ruins phase navigation.
+- Integer ambiguity resolution (PPP-AR) requires satellite phase biases (not part of
+  the `SpacebornBias` interface yet), see the `target_ppp_ar_*` test.
 
 Solver, strategies and API
 ==========================

@@ -116,7 +116,6 @@ impl Candidate {
     }
 
     /// Returns GF [Combination]
-    #[cfg(test)]
     pub(crate) fn phase_gf_combination(&self) -> Option<Combination> {
         let (c1, l1) = self.l1_phase_range()?;
         let (c2, l2) = self.subsidary_phase_range()?;

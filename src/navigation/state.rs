@@ -156,6 +156,13 @@ impl State {
         self.x[Navigation::clock_index()] = dt / SPEED_OF_LIGHT_M_S;
     }
 
+    /// Additive clock correction (s), with mutable access.
+    pub fn clock_correction_mut(&mut self, dt_s: f64) {
+        if self.x.nrows() > Navigation::clock_index() {
+            self.x[Navigation::clock_index()] += dt_s;
+        }
+    }
+
     /// Temporal update
     pub fn postfit_update_mut(&mut self, frame: Frame, dx: &DVector<f64>) -> PhysicsResult<()> {
         // TODO: velocity

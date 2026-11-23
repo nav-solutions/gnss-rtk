@@ -1,419 +1,615 @@
-use log::{debug, error};
+//! Precise Point Positioning (float): one navigation filter, code and phase.
+//!
+//! State (error-state EKF):
+//!
+//! ```text
+//! [ dx, dy, dz, c.dt, ZWD, ISB_1, ISB_2, ISB_3, N_1 ... N_n ]
+//! ```
+//!
+//! - ZWD: residual zenith wet delay (the a priori troposphere model being applied),
+//! - ISB_k: inter-system bias of the k-th secondary constellation, with respect to
+//!   the reference constellation (GPS when available) that defines c.dt,
+//! - N_i: float iono free ambiguity of the i-th phase arc ([PhaseTracker]).
+//!
+//! Each epoch processes the iono free code AND phase of every satellite:
+//! - at start, the ambiguities are unknown (code noise level): the solution
+//!   is a CPP solution,
+//! - as the geometry changes, the filter separates position and ambiguities:
+//!   the phase takes over progressively, the solution converges to the PPP
+//!   accuracy. No mode switch, no second filter.
+//!
+//! The phase tracker handles rising / setting satellites, data gaps and cycle
+//! slips; the filter also rejects (and restarts) phase arcs whose innovation is
+//! inconsistent with its covariance.
+use log::{debug, error, info};
 
-#[cfg(doc)]
-use crate::prelude::TimeScale;
-
-use nalgebra::{allocator::Allocator, DMatrix, DVector, DefaultAllocator, DimName, OMatrix};
+use nalgebra::{DMatrix, DVector, U4};
 
 use crate::{
+    constants::SPEED_OF_LIGHT_M_S,
     navigation::{
-        apriori::Apriori,
-        dop::DilutionOfPrecision,
-        kalman::{Kalman, KfEstimate},
-        postfit::PostfitKf,
-        ppp_ar::PrefitSolver as PPPPrefitSolver,
+        DilutionOfPrecision, Navigation, measurement_variance_m2,
+        phase::{PhaseObservables, initial_ambiguity_variance_m2},
         state::State,
         sv::SVContribution,
-        Navigation,
     },
-    prelude::{Candidate, Config, Epoch, Error, Frame, Method, UserParameters, SPEED_OF_LIGHT_M_S},
+    prelude::{Candidate, Duration, Epoch, Error, Method, UserParameters, Vector3},
 };
 
-impl<D: DimName> Navigation<D>
-where
-    DefaultAllocator: Allocator<D> + Allocator<D, D>,
-    <DefaultAllocator as Allocator<D>>::Buffer<f64>: Copy,
-    <DefaultAllocator as Allocator<D, D>>::Buffer<f64>: Copy,
-{
-    /// Absolute mutable iteration of the [Navigation] filter.
-    ///
-    /// ## Input
-    /// - epoch: sampling [Epoch]
-    /// - user: [User] profile
-    /// - past_state: past [State]
-    /// - candidates: [Candidate]s proposal
-    /// - size: number of proposed [Cadndidate]s
-    pub fn absolute_solving(
-        &mut self,
-        epoch: Epoch,
-        params: UserParameters,
-        initial_state: &State<D>,
-        candidates: &[Candidate],
-        size: usize,
-    ) -> Result<(), Error> {
-        self.clear();
+use nalgebra::DimName;
 
-        let mut initial_state = initial_state.clone();
+/// Receiver clock index
+const CLOCK: usize = 3;
 
-        if self.cfg.method == Method::PPP_AR {
-            if self.ppp_prefit.is_none() {
-                self.ppp_prefit = Some(PPPPrefitSolver::new(&self.cfg, &initial_state, self.frame));
-            }
-        }
+/// Zenith wet delay index
+const ZWD: usize = 4;
 
-        if let Some(ppp_prefit) = &mut self.ppp_prefit {
-            // run PPP-AR prefit
-            ppp_prefit.run(epoch, params, candidates, size)?;
-            initial_state = ppp_prefit.state.to_initial_state();
-        }
+/// First inter-system bias index
+const ISB: usize = 5;
 
-        // TODO Q model
+/// Number of inter-system bias states (secondary constellations)
+const MAX_ISB: usize = 3;
 
-        // self.q_k[(Self::clock_index(), Self::clock_index())] =
-        //     (user.clock_sigma_s * SPEED_OF_LIGHT_M_S).powi(2);
+/// First ambiguity index
+const AMBIGUITY: usize = ISB + MAX_ISB;
 
-        self.q_k[(Self::clock_index(), Self::clock_index())] =
-            (100e-3 * SPEED_OF_LIGHT_M_S).powi(2);
+/// Initial inter-system bias standard deviation (m): ~100 ns
+const ISB_INITIAL_SIGMA_M: f64 = 30.0;
 
-        if !self.kalman.initialized {
-            self.kf_initialization(epoch, &initial_state, candidates, size)?;
-        } else {
-            self.kf_run(epoch, candidates, size)?;
-        }
+/// Inter-system bias random walk (m²/s): stable hardware delays
+const ISB_RANDOM_WALK_M2_S: f64 = 1.0E-6;
 
-        if self.cfg.solver.postfit_denoising > 0.0 {
-            if let Some(postfit) = &mut self.postfit {
-                let prev_epoch = self
-                    .prev_epoch
-                    .expect("internal error: undetermined past epoch");
+/// Receiver clock (white noise) standard deviation, after re-centering (m)
+const RECEIVER_CLOCK_SIGMA_M: f64 = 100.0;
 
-                let dt = epoch - prev_epoch;
-                let dx = postfit.run(&self.state, dt)?;
+/// Initial ZWD standard deviation (m)
+const ZWD_INITIAL_SIGMA_M: f64 = 0.3;
 
-                // update state
-                self.state
-                    .postfit_update_mut(self.frame, dx.x)
-                    .map_err(|e| {
-                        error!(
-                            "{} - postfit state update failed with physical error: {}",
-                            epoch, e
-                        );
-                        Error::StateUpdate
-                    })?;
-            } else {
-                self.postfit = Some(PostfitKf::new(
-                    &self.state,
-                    1.0 / self.cfg.solver.postfit_denoising,
-                    1.0 / self.cfg.solver.postfit_denoising,
-                    1.0,
-                    1.0,
-                ));
-            }
-        }
+/// ZWD random walk (m²/s): ~2 cm/sqrt(h)
+const ZWD_RANDOM_WALK_M2_S: f64 = 1.0E-7;
 
-        self.prev_epoch = Some(epoch);
-        self.initialized = true;
+/// Phase innovation test: number of standard deviations
+const PHASE_INNOVATION_SIGMAS: f64 = 5.0;
 
-        Ok(())
+/// Phase innovation test: minimal rejection threshold (m). Below, a slip
+/// is not distinguishable from multipath on real data.
+const PHASE_INNOVATION_MIN_M: f64 = 0.08;
+
+/// Wet mapping function (cosecant law, adequate above the default elevation mask)
+fn wet_mapping(elevation_deg: f64) -> f64 {
+    1.0 / elevation_deg.max(5.0).to_radians().sin()
+}
+
+/// Linearized PPP measurements of one satellite
+struct PppRow {
+    /// partial derivatives with respect to the position
+    h: (f64, f64, f64),
+    /// wet mapping
+    m_wet: f64,
+    /// code: observed - computed (receiver clock, ZWD excluded)
+    code_residual_m: f64,
+    code_variance_m2: f64,
+    /// phase: (observed - computed, variance, arc index), ambiguity excluded
+    phase: Option<(f64, f64, usize)>,
+    /// phase observables (arc restart)
+    observables: Option<PhaseObservables>,
+    /// inter-system bias: (state index, current value in m), None for the reference
+    isb: Option<(usize, f64)>,
+    contribution: SVContribution,
+}
+
+impl PppRow {
+    /// Current inter-system bias (m)
+    fn isb_m(&self) -> f64 {
+        self.isb.map(|(_, isb_m)| isb_m).unwrap_or(0.0)
+    }
+}
+
+impl Navigation {
+    /// [Config] used to form the code rows
+    fn code_config(&self) -> crate::prelude::Config {
+        let mut cfg = self.cfg.clone();
+        cfg.method = Method::CPP;
+        cfg
     }
 
-    fn clear(&mut self) {
-        self.sv.clear();
-        self.indexes.clear();
-        self.y_k_vec.clear();
-        self.w_k_vec.clear();
-    }
-
-    /// Filter first iteration.
-    pub fn kf_initialization(
-        &mut self,
+    /// PPP rows at the nominal position
+    fn ppp_rows(
+        &self,
         t: Epoch,
-        state: &State<D>,
         candidates: &[Candidate],
         size: usize,
-    ) -> Result<(), Error> {
-        let nb_iter = 10;
-        let mut pending = state.clone();
-        let mut dop = DilutionOfPrecision::default();
+        position_m: Vector3<f64>,
+    ) -> Vec<PppRow> {
+        let code_cfg = self.code_config();
+        let mut rows = Vec::with_capacity(size);
 
-        // measurement
-        for i in 0..size {
-            let mut contrib = SVContribution::default();
+        for candidate in candidates.iter().take(size) {
+            if !self
+                .isb_systems
+                .iter()
+                .any(|(c, _)| *c == candidate.sv.constellation)
+            {
+                continue; // no clock / inter-system bias state for this constellation
+            }
 
-            contrib.sv = candidates[i].sv;
-
-            let position_m = pending.to_position_ecef_m();
-
-            let amb = match self.cfg.method {
-                Method::PPP_AR => {
-                    if let Some(prefit) = &self.ppp_prefit {
-                        if let Some(n_amb) = prefit.fixed_ambiguity(&candidates[i].sv) {
-                            Some(n_amb)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                },
-                Method::SPP | Method::CPP | Method::PPP => None,
+            let mut contribution = SVContribution {
+                sv: candidate.sv,
+                ..Default::default()
             };
 
-            match candidates[i].ppp_vector_contribution(
-                t,
-                &self.cfg,
+            let code = match candidate.ppp_vector_contribution(
+                &code_cfg,
                 false,
-                amb,
                 position_m,
-                pending.lat_long_alt_deg_deg_km,
-                &mut contrib,
+                &mut contribution,
             ) {
-                Ok(vec) => {
-                    self.y_k_vec.push(vec.row_1);
-                    self.w_k_vec.push(1.0); // TODO improve model
-                    self.indexes.push(i);
-                    self.sv.push(contrib);
-                },
+                Ok(vec) => vec.row_1,
                 Err(e) => {
-                    error!("{}({}) - cannot contribute: {}", t, candidates[i].sv, e);
+                    error!("{t}({}) - code measurement error: {e}", candidate.sv);
+                    continue;
                 },
-            }
-        }
+            };
 
-        let y_len = self.indexes.len();
+            let elevation_deg = candidate.elevation_deg;
+            let h = candidate.ppp_matrix_contribution(&code_cfg, position_m);
 
-        if y_len < D::USIZE {
-            return Err(Error::MatrixMinimalDimension);
-        }
+            let observables = PhaseObservables::from_candidate(candidate);
 
-        self.g_k.resize_mut(y_len, D::USIZE, 0.0);
+            let phase = match (self.tracker.index_of(candidate.sv), observables) {
+                (Some(arc), Some(_)) => {
+                    let mut c = SVContribution::default();
+                    match candidate.ppp_vector_contribution(&self.cfg, true, position_m, &mut c) {
+                        Ok(vec) => Some((
+                            vec.row_2,
+                            measurement_variance_m2(Method::PPP, elevation_deg, false),
+                            arc,
+                        )),
+                        Err(_) => None,
+                    }
+                },
+                _ => None,
+            };
 
-        // run
-        for ith in 0..nb_iter {
-            let y_len = self.y_k_vec.len();
+            let isb = self
+                .isb_systems
+                .iter()
+                .enumerate()
+                .skip(1)
+                .find(|(_, (c, _))| *c == candidate.sv.constellation)
+                .map(|(slot, (_, isb_m))| (ISB + slot - 1, *isb_m));
 
-            // Form W
-            self.w_k.resize_mut(y_len, y_len, 0.0);
-
-            for i in 0..y_len {
-                self.w_k[(i, i)] = 1.0 / self.w_k_vec[i];
-            }
-
-            let y_k = DVector::from_row_slice(&self.y_k_vec); // TODO malloc
-            debug!("(i={}) Y: {}", ith, y_k);
-
-            // Form G
-            for (i, index) in self.indexes.iter().enumerate() {
-                let position_m = pending.to_position_ecef_m();
-
-                let (dx, dy, dz) =
-                    candidates[*index].ppp_matrix_contribution(&self.cfg, position_m);
-
-                self.g_k[(i, 0)] = dx;
-                self.g_k[(i, 1)] = dy;
-                self.g_k[(i, 2)] = dz;
-
-                self.g_k[(i, Self::clock_index())] = 1.0;
-            }
-
-            // run
-            let gt = self.g_k.transpose();
-            let gt_g = gt.clone() * self.g_k.clone();
-            let gt_w = gt.clone() * self.w_k.clone();
-            let gt_w_g = gt_w * self.g_k.clone();
-            let gt_w_g_inv = gt_w_g.try_inverse().ok_or(Error::MatrixInversion)?;
-            let gt_w_g_inv_gt = gt_w_g_inv.clone() * gt.clone();
-            let gt_w_g_inv_gt_w = gt_w_g_inv_gt * self.w_k.clone();
-
-            self.x_k = gt_w_g_inv_gt_w * y_k.clone();
-            self.p_k = gt_w_g_inv.clone();
-
-            let ndf = self.x_k.nrows();
-            debug!("(i={}) dx={}", ith, self.x_k);
-
-            pending
-                .correct_mut(self.frame, t, &self.x_k, ndf)
-                .map_err(|e| {
-                    error!("{} - state update failed with physical error: {}", t, e);
-                    Error::StateUpdate
-                })?;
-
-            let gt_g_inv = gt_g.try_inverse().ok_or(Error::MatrixInversion)?;
-
-            // update latest DoP
-            dop = DilutionOfPrecision::new(&pending, gt_g_inv);
-
-            debug!("(i={}) {} - pending state {}", ith, t, pending);
-
-            // models update
-            self.y_k_vec.clear();
-            self.w_k_vec.clear();
-
-            self.indexes.retain(|i| {
-                let mut unused = SVContribution::default();
-
-                let position_m = pending.to_position_ecef_m();
-
-                let amb = match self.cfg.method {
-                    Method::PPP_AR => {
-                        if let Some(prefit) = &self.ppp_prefit {
-                            if let Some(n_amb) = prefit.fixed_ambiguity(&candidates[*i].sv) {
-                                Some(n_amb)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    },
-                    Method::SPP | Method::CPP | Method::PPP => None,
-                };
-
-                match candidates[*i].ppp_vector_contribution(
-                    t,
-                    &self.cfg,
-                    false,
-                    amb,
-                    position_m,
-                    pending.lat_long_alt_deg_deg_km,
-                    &mut unused,
-                ) {
-                    Ok(vec) => {
-                        self.y_k_vec.push(vec.row_1);
-                        self.w_k_vec.push(1.0); // TODO improve model
-                        true
-                    },
-                    Err(e) => {
-                        error!("{}({}) - cannot contribute: {}", t, candidates[*i].sv, e);
-                        false
-                    },
-                }
+            rows.push(PppRow {
+                isb,
+                h,
+                m_wet: wet_mapping(elevation_deg.unwrap_or(90.0)),
+                code_residual_m: code,
+                code_variance_m2: measurement_variance_m2(Method::CPP, elevation_deg, false),
+                phase,
+                observables,
+                contribution,
             });
         }
 
-        // validation
-        self.state_validation(&dop)?;
-
-        let initial_estimate = KfEstimate::from_dynamic(self.x_k.clone(), self.p_k.clone());
-
-        self.kalman.initialize(self.f_k, self.q_k, initial_estimate);
-
-        self.state = pending;
-        self.dop = dop;
-
-        debug!("{} - new state {}", t, self.state);
-        debug!("{} - gdop={} tdop={}", t, self.dop.gdop, self.dop.tdop);
-
-        Ok(())
+        rows
     }
 
-    /// [Kalman] filter run
-    pub fn kf_run(&mut self, t: Epoch, candidates: &[Candidate], size: usize) -> Result<(), Error> {
-        let mut pending = self.state.clone();
+    /// Covariance with the ambiguity states re-indexed after a tracker update.
+    fn reindexed_covariance(p: &DMatrix<f64>, previous_index: &[Option<usize>]) -> DMatrix<f64> {
+        let n = AMBIGUITY + previous_index.len();
+        let mut out = DMatrix::<f64>::zeros(n, n);
 
-        // measurement
-        for i in 0..size {
-            let mut contrib = SVContribution::default();
+        // old index of each new state
+        let map = (0..n)
+            .map(|i| {
+                if i < AMBIGUITY {
+                    Some(i)
+                } else {
+                    previous_index[i - AMBIGUITY].map(|k| AMBIGUITY + k)
+                }
+            })
+            .collect::<Vec<_>>();
 
-            contrib.sv = candidates[i].sv;
-
-            let pos_m = pending.to_position_ecef_m();
-
-            let amb = match self.cfg.method {
-                Method::PPP_AR => {
-                    if let Some(prefit) = &self.ppp_prefit {
-                        if let Some(n_amb) = prefit.fixed_ambiguity(&candidates[i].sv) {
-                            Some(n_amb)
-                        } else {
-                            None
+        for i in 0..n {
+            match map[i] {
+                Some(oi) => {
+                    for j in 0..n {
+                        if let Some(oj) = map[j] {
+                            out[(i, j)] = p[(oi, oj)];
                         }
-                    } else {
-                        None
                     }
                 },
-                Method::SPP | Method::CPP | Method::PPP => None,
-            };
-
-            match candidates[i].ppp_vector_contribution(
-                t,
-                &self.cfg,
-                false,
-                amb,
-                pos_m,
-                pending.lat_long_alt_deg_deg_km,
-                &mut contrib,
-            ) {
-                Ok(vec) => {
-                    self.y_k_vec.push(vec.row_1);
-                    self.w_k_vec.push(1.0); // TODO improve model
-                    self.indexes.push(i);
-                    self.sv.push(contrib);
-                },
-                Err(e) => {
-                    error!("{}({}) - cannot contribute: {}", t, candidates[i].sv, e);
-                },
+                None => out[(i, i)] = initial_ambiguity_variance_m2(),
             }
         }
 
-        let y_len = self.y_k_vec.len();
+        out
+    }
 
-        if y_len < D::USIZE {
+    /// Resets one state of the covariance (no correlation, given variance)
+    fn reset_state_covariance(p: &mut DMatrix<f64>, index: usize, variance: f64) {
+        let n = p.nrows();
+        for k in 0..n {
+            p[(index, k)] = 0.0;
+            p[(k, index)] = 0.0;
+        }
+        p[(index, index)] = variance;
+    }
+
+    /// Assigns the inter-system bias states: the reference constellation
+    /// (GPS when available) defines the receiver clock, the other ones get
+    /// an ISB state (first come first served, [MAX_ISB] at most).
+    fn ppp_assign_isb(&mut self, t: Epoch, candidates: &[Candidate]) {
+        use crate::prelude::Constellation;
+
+        if self.isb_systems.is_empty() {
+            let reference = if candidates
+                .iter()
+                .any(|cd| cd.sv.constellation == Constellation::GPS)
+            {
+                Some(Constellation::GPS)
+            } else {
+                candidates.first().map(|cd| cd.sv.constellation)
+            };
+
+            if let Some(reference) = reference {
+                self.isb_systems.push((reference, 0.0));
+            }
+        }
+
+        for cd in candidates.iter() {
+            let constellation = cd.sv.constellation;
+
+            if self.isb_systems.iter().any(|(c, _)| *c == constellation) {
+                continue;
+            }
+
+            if self.isb_systems.len() > MAX_ISB {
+                error!(
+                    "{t}({}) - too many constellations: no inter-system bias state",
+                    cd.sv
+                );
+                continue;
+            }
+
+            debug!("{t} - ppp: {constellation} inter-system bias state");
+            self.isb_systems.push((constellation, 0.0));
+        }
+    }
+
+    /// Completes a (code based) initialization with the troposphere and
+    /// the phase arcs of this epoch.
+    pub(crate) fn ppp_initialize(&mut self, t: Epoch, candidates: &[Candidate]) {
+        self.tracker.reset();
+        self.zwd_m = 0.0;
+        self.isb_systems.clear();
+        self.ppp_assign_isb(t, candidates);
+
+        let update = self.tracker.update(t, candidates);
+
+        let p_4 = self.kalman.covariance().clone();
+        let n = AMBIGUITY + update.previous_index.len();
+
+        let mut p = DMatrix::<f64>::zeros(n, n);
+
+        for i in 0..U4::DIM.min(p_4.nrows()) {
+            for j in 0..U4::DIM.min(p_4.ncols()) {
+                p[(i, j)] = p_4[(i, j)];
+            }
+        }
+
+        p[(ZWD, ZWD)] = ZWD_INITIAL_SIGMA_M.powi(2);
+
+        for i in ISB..AMBIGUITY {
+            p[(i, i)] = ISB_INITIAL_SIGMA_M.powi(2);
+        }
+
+        for i in AMBIGUITY..n {
+            p[(i, i)] = initial_ambiguity_variance_m2();
+        }
+
+        self.kalman.initialize_error_state(&p);
+
+        info!("{t} - ppp: {} phase arcs initialized", self.tracker.len());
+    }
+
+    /// PPP filter run, transactional (the filter, the tracker and the
+    /// troposphere are restored if the epoch is rejected).
+    pub(crate) fn ppp_run(
+        &mut self,
+        t: Epoch,
+        params: UserParameters,
+        dt: Duration,
+        nominal: &State,
+        candidates: &[Candidate],
+        size: usize,
+    ) -> Result<(), Error> {
+        let snapshot = (
+            self.kalman.clone(),
+            self.tracker.clone(),
+            self.zwd_m,
+            self.isb_systems.clone(),
+        );
+
+        let ret = self.ppp_run_uncommitted(t, params, dt, nominal, candidates, size);
+
+        if ret.is_err() {
+            (self.kalman, self.tracker, self.zwd_m, self.isb_systems) = snapshot;
+        }
+
+        ret
+    }
+
+    fn ppp_run_uncommitted(
+        &mut self,
+        t: Epoch,
+        params: UserParameters,
+        dt: Duration,
+        nominal: &State,
+        candidates: &[Candidate],
+        size: usize,
+    ) -> Result<(), Error> {
+        // context switch (from RTK, or another method): restart the PPP states
+        if self.kalman.covariance().nrows() < AMBIGUITY {
+            self.kalman_dimension_mut(U4::DIM);
+            self.ppp_initialize(t, &[]);
+        }
+
+        let mut pending = nominal.clone();
+        pending.resize_mut(U4::DIM);
+
+        self.ppp_assign_isb(t, candidates);
+
+        // phase tracking: arcs continue, slip, end or start
+        let update = self.tracker.update(t, candidates);
+        let mut p = Self::reindexed_covariance(self.kalman.covariance(), &update.previous_index);
+        let n = p.nrows();
+
+        // prediction
+        let mut q = DMatrix::<f64>::zeros(n, n);
+        params.q_matrix(&mut q, dt, U4::DIM);
+        q[(ZWD, ZWD)] = ZWD_RANDOM_WALK_M2_S * dt.to_seconds().abs();
+
+        for i in ISB..AMBIGUITY {
+            q[(i, i)] = ISB_RANDOM_WALK_M2_S * dt.to_seconds().abs();
+        }
+
+        p += q;
+
+        // The receiver clock is a white noise process: it is re-centered on the code
+        // below, then estimated from scratch at every epoch. Real receiver clocks
+        // (steered, or simply noisy) do not follow the user clock profile at the
+        // decimeter level: a too tight clock prior turns every common mode phase
+        // innovation into a vertical (and troposphere) error.
+        for i in 0..n {
+            p[(CLOCK, i)] = 0.0;
+            p[(i, CLOCK)] = 0.0;
+        }
+        p[(CLOCK, CLOCK)] = RECEIVER_CLOCK_SIGMA_M.powi(2);
+
+        let rows = self.ppp_rows(t, candidates, size, pending.to_position_ecef_m());
+
+        if rows.len() < U4::DIM + 1 {
             return Err(Error::MatrixMinimalDimension);
         }
 
-        let y_k = DVector::from_row_slice(&self.y_k_vec); // TODO malloc
-        debug!("Y: {}", y_k);
+        // receiver clock re-centering (median code innovation)
+        let clock_m = pending.clock_profile_s().0 * SPEED_OF_LIGHT_M_S;
 
-        self.w_k.resize_mut(y_len, y_len, 0.0);
-        self.g_k.resize_mut(y_len, D::USIZE, 0.0);
+        let mut code_innov = rows
+            .iter()
+            .map(|r| r.code_residual_m - clock_m - r.m_wet * self.zwd_m - r.isb_m())
+            .collect::<Vec<_>>();
 
-        for i in 0..y_len {
-            self.w_k[(i, i)] = 1.0 / self.w_k_vec[i];
+        let mut sorted = code_innov.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let shift_m = sorted[sorted.len() / 2];
+
+        pending.clock_correction_mut(shift_m / SPEED_OF_LIGHT_M_S);
+        code_innov.iter_mut().for_each(|z| *z -= shift_m);
+
+        let clock_m = clock_m + shift_m;
+
+        // phase innovations
+        let mut phase_innov: Vec<Option<(f64, f64, usize)>> = rows
+            .iter()
+            .map(|row| {
+                row.phase.map(|(residual_m, var_m2, arc)| {
+                    let z = residual_m
+                        - clock_m
+                        - row.m_wet * self.zwd_m
+                        - row.isb_m()
+                        - self.tracker.arcs[arc].ambiguity_m;
+                    (z, var_m2, arc)
+                })
+            })
+            .collect();
+
+        // Phase consistency test (cycle slips missed by the tracker, outliers).
+        // The receiver clock is only known at the code level at this point: the
+        // test applies to the innovations with respect to their median (common mode
+        // removed), and to the state uncertainty without the clock.
+        let mature = phase_innov
+            .iter()
+            .flatten()
+            .filter(|(_, _, arc)| self.tracker.arcs[*arc].epochs > 2)
+            .map(|(z, _, _)| *z)
+            .collect::<Vec<_>>();
+
+        if mature.len() >= 3 {
+            let mut sorted = mature.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let common_m = sorted[sorted.len() / 2];
+
+            for (k, row) in rows.iter().enumerate() {
+                let Some((z, var_m2, arc)) = phase_innov[k] else {
+                    continue;
+                };
+
+                if self.tracker.arcs[arc].epochs <= 2 {
+                    continue;
+                }
+
+                let mut hv = DVector::<f64>::zeros(n);
+                hv[0] = row.h.0;
+                hv[1] = row.h.1;
+                hv[2] = row.h.2;
+                hv[ZWD] = row.m_wet;
+                if let Some((col, _)) = row.isb {
+                    hv[col] = 1.0;
+                }
+                hv[AMBIGUITY + arc] = 1.0;
+
+                let s = (hv.transpose() * &p * &hv)[(0, 0)] + var_m2;
+                let threshold = (PHASE_INNOVATION_SIGMAS * s.sqrt()).max(PHASE_INNOVATION_MIN_M);
+
+                if (z - common_m).abs() <= threshold {
+                    continue;
+                }
+
+                info!(
+                    "{t}({}) - phase innovation {:.3} m > {:.3} m: arc restarted",
+                    row.contribution.sv,
+                    z - common_m,
+                    threshold
+                );
+
+                let Some(obs) = row.observables else {
+                    phase_innov[k] = None;
+                    continue;
+                };
+
+                self.tracker.restart(t, row.contribution.sv, &obs);
+                Self::reset_state_covariance(
+                    &mut p,
+                    AMBIGUITY + arc,
+                    initial_ambiguity_variance_m2(),
+                );
+
+                let (residual_m, _, _) = row.phase.unwrap();
+                let z = residual_m
+                    - clock_m
+                    - row.m_wet * self.zwd_m
+                    - row.isb_m()
+                    - self.tracker.arcs[arc].ambiguity_m;
+
+                phase_innov[k] = Some((z, var_m2, arc));
+            }
         }
 
-        // form g_k
-        for (i, index) in self.indexes.iter().enumerate() {
-            let position_m = pending.to_position_ecef_m();
-            let (dx, dy, dz) = candidates[*index].ppp_matrix_contribution(&self.cfg, position_m);
+        // linear system
+        let num_phase = phase_innov.iter().filter(|p| p.is_some()).count();
+        let m = rows.len() + num_phase;
 
-            self.g_k[(i, 0)] = dx;
-            self.g_k[(i, 1)] = dy;
-            self.g_k[(i, 2)] = dz;
-            self.g_k[(i, Self::clock_index())] = 1.0;
+        let mut g = DMatrix::<f64>::zeros(m, n);
+        let mut w = DMatrix::<f64>::zeros(m, m);
+        let mut z = DVector::<f64>::zeros(m);
+
+        // position / clock geometry of the code rows (DOP)
+        let mut g_code = DMatrix::<f64>::zeros(rows.len(), U4::DIM);
+
+        let mut i = 0;
+
+        for (k, row) in rows.iter().enumerate() {
+            for (col, v) in [(0, row.h.0), (1, row.h.1), (2, row.h.2), (CLOCK, 1.0)] {
+                g[(i, col)] = v;
+                g_code[(k, col)] = v;
+            }
+            g[(i, ZWD)] = row.m_wet;
+            if let Some((col, _)) = row.isb {
+                g[(i, col)] = 1.0;
+            }
+            w[(i, i)] = 1.0 / row.code_variance_m2;
+            z[i] = code_innov[k];
+            i += 1;
+
+            if let Some((z_phase, var_m2, arc)) = phase_innov[k] {
+                g[(i, 0)] = row.h.0;
+                g[(i, 1)] = row.h.1;
+                g[(i, 2)] = row.h.2;
+                g[(i, CLOCK)] = 1.0;
+                g[(i, ZWD)] = row.m_wet;
+                if let Some((col, _)) = row.isb {
+                    g[(i, col)] = 1.0;
+                }
+                g[(i, AMBIGUITY + arc)] = 1.0;
+                w[(i, i)] = 1.0 / var_m2;
+                z[i] = z_phase;
+                i += 1;
+            }
         }
 
-        let estimate = self
-            .kalman
-            .run(&self.f_k, &self.g_k, &self.w_k, &self.q_k, &y_k)?;
+        debug!(
+            "{t} - ppp: {} code, {} phase measurements, {} arcs",
+            rows.len(),
+            num_phase,
+            self.tracker.len()
+        );
 
-        debug!("state correction: dx={}", estimate.x);
+        self.kalman.initialize_error_state(&p);
 
-        let ndf = estimate.x.nrows();
+        let estimate = self.kalman.update_error_state(&g, &w, &z)?;
 
-        for i in 0..ndf {
-            self.x_k[i] = estimate.x[i];
+        if !estimate
+            .x
+            .iter()
+            .chain(estimate.p.iter())
+            .all(|v| v.is_finite())
+        {
+            error!("{t} - non finite ppp state correction");
+            return Err(Error::StateUpdate);
         }
+
+        let dx = &estimate.x;
+
+        debug!(
+            "{t} - ppp correction: position=({:.3}, {:.3}, {:.3}) m, clock={:.3} m, zwd={:.4} m",
+            dx[0], dx[1], dx[2], dx[CLOCK], dx[ZWD]
+        );
 
         pending
-            .correct_mut(self.frame, t, &self.x_k, ndf)
+            .spatial_correction_mut(self.frame, (dx[0], dx[1], dx[2]))
             .map_err(|e| {
-                error!("{} - state update failed with physical error: {}", t, e);
+                error!("{t} - state update failed with physical error: {e}");
                 Error::StateUpdate
             })?;
 
-        let gt_g_inv = (self.g_k.transpose() * self.g_k.clone())
+        pending.clock_correction_mut(dx[CLOCK] / SPEED_OF_LIGHT_M_S);
+
+        self.zwd_m += dx[ZWD];
+
+        for (slot, (_, isb_m)) in self.isb_systems.iter_mut().enumerate().skip(1) {
+            *isb_m += dx[ISB + slot - 1];
+        }
+
+        for (j, arc) in self.tracker.arcs.iter_mut().enumerate() {
+            arc.ambiguity_m += dx[AMBIGUITY + j];
+        }
+
+        let gt_g_inv = (g_code.transpose() * &g_code)
             .try_inverse()
             .ok_or(Error::MatrixInversion)?;
 
-        // update
         let dop = DilutionOfPrecision::new(&pending, gt_g_inv);
 
-        self.state_validation(&dop)?;
-
-        self.dop = dop;
-        self.state = pending;
-
-        debug!("{} - new state {}", t, pending);
-        debug!("{} - gdop={} tdop={}", t, self.dop.gdop, self.dop.tdop);
-
-        Ok(())
-    }
-
-    /// Validate pending [State]
-    fn state_validation(&self, dop: &DilutionOfPrecision) -> Result<(), Error> {
         if dop.gdop > self.cfg.solver.max_gdop {
             return Err(Error::MaxGdopExceeded);
         }
+
+        self.dop = dop;
+        self.state = pending;
+        self.sv = rows.into_iter().map(|row| row.contribution).collect();
+
+        debug!(
+            "{t} - ppp sigma: pos=({:.3}, {:.3}, {:.3}) m, clock={:.3} m, zwd={:.4} m, zwd_nominal={:.4} m",
+            estimate.p[(0, 0)].sqrt(),
+            estimate.p[(1, 1)].sqrt(),
+            estimate.p[(2, 2)].sqrt(),
+            estimate.p[(CLOCK, CLOCK)].sqrt(),
+            estimate.p[(ZWD, ZWD)].sqrt(),
+            self.zwd_m
+        );
+
         Ok(())
     }
 }

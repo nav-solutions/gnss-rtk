@@ -53,6 +53,9 @@ pub struct Pool<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, S
     /// Runtime selected pivot position (ECEF, meters)
     pub pivot_position_ecef_m: Option<(f64, f64, f64)>,
 
+    /// Pivot satellite elected in RTK post-fit
+    pub pivot: Option<Candidate>,
+
     /// Single [Differences]
     single_differences: Differences,
 }
@@ -104,6 +107,7 @@ impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: Spacebor
             // smoother,
             almanac,
             pivot_position_ecef_m: None,
+            pivot: None,
             past: Vec::with_capacity(8),
             inner: Vec::with_capacity(8),
             eph_buffer: HashMap::with_capacity(8),
@@ -115,6 +119,7 @@ impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: Spacebor
     pub fn new_epoch(&mut self, candidates: &[Candidate]) {
         self.inner = candidates.to_vec();
         self.pivot_position_ecef_m = None;
+        self.pivot = None;
     }
 
     /// Returns total number of [Candidate]s
@@ -145,7 +150,24 @@ impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: Spacebor
     }
 
     /// Determine orbital states
+    /// Resolves the orbital states, assuming a null receiver clock offset.
+    /// See [Self::orbital_states_fit_with_clock].
     pub fn orbital_states_fit(&mut self, name: &str) {
+        self.orbital_states_fit_with_clock(name, 0.0);
+    }
+
+    /// Resolves the orbital states at transmission time, and rotates them
+    /// to the earth fixed frame at reception time (Sagnac effect).
+    ///
+    /// ## Input
+    /// - name: station name (logs)
+    /// - rx_clock_offset_s: latest receiver clock offset estimate. The time of
+    ///   flight deduced from the pseudo range includes the receiver clock offset,
+    ///   which must be removed to obtain the geometric time of flight
+    ///   (a 1 ms offset would otherwise rotate the satellites by ~25 cm).
+    pub fn orbital_states_fit_with_clock(&mut self, name: &str, rx_clock_offset_s: f64) {
+        let rx_clock_offset = Duration::from_seconds(rx_clock_offset_s);
+
         self.inner
             .retain_mut(|cd| match cd.transmission_time(name, &self.cfg) {
                 Ok(_) => {
@@ -157,7 +179,7 @@ impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: Spacebor
                     {
                         let orbit = orbit_rotation(
                             cd.epoch,
-                            cd.signal_time_of_flight(),
+                            cd.signal_time_of_flight() - rx_clock_offset,
                             orbit,
                             self.cfg.modeling.earth_rotation,
                             self.earth_cef,
@@ -173,7 +195,7 @@ impl<EPH: EphemerisSource, ORB: OrbitSource, EB: EnvironmentalBias, SB: Spacebor
                             if let Some(state) = eph.resolve_state(cd.tx_epoch, self.earth_cef) {
                                 let state = orbit_rotation(
                                     cd.epoch,
-                                    cd.signal_time_of_flight(),
+                                    cd.signal_time_of_flight() - rx_clock_offset,
                                     &state,
                                     self.cfg.modeling.earth_rotation,
                                     self.earth_cef,

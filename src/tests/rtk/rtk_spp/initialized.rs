@@ -4,13 +4,10 @@ use std::str::FromStr;
 
 use crate::{
     navigation::apriori::Apriori,
-    prelude::{
-        Almanac, ClockProfile, Config, Epoch, Frame, Method, PVTSolutionType, Solver,
-        UserParameters, UserProfile,
-    },
+    prelude::{Almanac, Epoch, Frame, Method, Solver, UserParameters},
     tests::{
-        CandidatesBuilder, MAX_RTK_CPP_GDOP, MAX_RTK_CPP_X_ERROR_M, MAX_RTK_CPP_Y_ERROR_M,
-        MAX_RTK_CPP_Z_ERROR_M, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment,
+        CandidatesBuilder, MAX_RTK_SPP_GDOP, MAX_RTK_SPP_X_ERROR_M, MAX_RTK_SPP_Y_ERROR_M,
+        MAX_RTK_SPP_Z_ERROR_M, OrbitsData, ROVER_REFERENCE_COORDS_ECEF_M, TestEnvironment,
         TestSpacebornBiases, ephemeris::NullEph, init_logger, time::NullTime,
     },
 };
@@ -34,12 +31,12 @@ fn build_initial_apriori() -> Apriori {
 }
 
 #[test]
-fn static_rtk_cpp() {
+fn static_rtk_spp() {
     init_logger();
 
-    let cfg = Config::default().with_navigation_method(Method::CPP);
+    let cfg = crate::tests::navigation_test_config(Method::SPP);
 
-    let default_params = UserParameters::new(UserProfile::Static, ClockProfile::Quartz);
+    let default_params = UserParameters::default();
 
     let almanac = build_almanac();
     let earth_frame = build_earth_frame();
@@ -53,7 +50,7 @@ fn static_rtk_cpp() {
 
     let rtk_base = CandidatesBuilder::build_rtk_base();
 
-    let mut solver = Solver::new_survey(
+    let mut solver = Solver::new(
         almanac,
         earth_frame,
         cfg,
@@ -62,6 +59,7 @@ fn static_rtk_cpp() {
         space_biases.into(),
         environment.into(),
         null_time,
+        Some(ROVER_REFERENCE_COORDS_ECEF_M),
     );
 
     for (nth, epoch_str) in [
@@ -80,14 +78,21 @@ fn static_rtk_cpp() {
 
         assert!(
             !candidates.is_empty(),
-            "no measurements to propose at \"{epoch_str}\""
+            "{epoch_str} - no measurements to propose"
         );
 
         let status = solver.rtk(t_gpst, default_params, &candidates, &rtk_base);
 
         match status {
-            Err(e) => panic!("Static RTK-CPP process failed with invalid error: {e}"),
+            Err(e) => panic!("Static RTK-SPP process failed with invalid error: {e}"),
             Ok(pvt) => {
+                // preset performance contract (README)
+                crate::tests::spec::assert_pvt_contract(
+                    crate::tests::spec::Preset::RtkSPP,
+                    &pvt,
+                    ROVER_REFERENCE_COORDS_ECEF_M,
+                );
+
                 info!("Solution #{} {:#?}", nth + 1, pvt);
 
                 let (pos_x_m, pos_y_m, pos_z_m) = pvt.pos_m;
@@ -100,30 +105,27 @@ fn static_rtk_cpp() {
                 );
 
                 assert!(
-                    err_x_m < MAX_RTK_CPP_X_ERROR_M,
+                    err_x_m < MAX_RTK_SPP_X_ERROR_M,
                     "epoch={epoch_str} - x error={err_x_m}m too large"
                 );
 
                 assert!(
-                    err_y_m < MAX_RTK_CPP_Y_ERROR_M,
+                    err_y_m < MAX_RTK_SPP_Y_ERROR_M,
                     "epoch={epoch_str} - y error={err_y_m}m too large"
                 );
 
                 assert!(
-                    err_z_m < MAX_RTK_CPP_Z_ERROR_M,
+                    err_z_m < MAX_RTK_SPP_Z_ERROR_M,
                     "epoch={epoch_str} - z error={err_z_m}m too large"
                 );
 
-                assert_eq!(pvt.solution_type, PVTSolutionType::RTK);
-
                 assert!(
-                    pvt.gdop < MAX_RTK_CPP_GDOP,
-                    "{epoch_str} (static) rtk-cpp survey GDOP too large!"
+                    pvt.gdop < MAX_RTK_SPP_GDOP,
+                    "{epoch_str} (static) rtk-spp GDOP too large!"
                 );
 
                 info!(
-                    "{} (static) rtk-cpp survey error: x={}m y={}m z={}, GDOP={} TDOP={}",
-                    epoch_str, err_x_m, err_y_m, err_z_m, pvt.gdop, pvt.tdop,
+                    "{epoch_str} (static) rtk-spp (with preset) error: x={err_x_m}m y={err_y_m}m z={err_z_m}"
                 );
             },
         }

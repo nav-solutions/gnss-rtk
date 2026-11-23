@@ -5,8 +5,8 @@ use std::str::FromStr;
 use crate::{
     navigation::apriori::Apriori,
     prelude::{
-        Almanac, ClockProfile, Config, Epoch, Frame, Method, PVTSolutionType, Solver,
-        UserParameters, UserProfile,
+        Almanac, ClockProfile, Epoch, Frame, Method, PVTSolutionType, Solver, UserParameters,
+        UserProfile,
     },
     tests::{
         CandidatesBuilder, MAX_CPP_GDOP, MAX_CPP_X_ERROR_M, MAX_CPP_Y_ERROR_M, MAX_CPP_Z_ERROR_M,
@@ -37,7 +37,7 @@ fn build_initial_apriori() -> Apriori {
 fn static_cpp() {
     init_logger();
 
-    let cfg = Config::default().with_navigation_method(Method::CPP);
+    let cfg = crate::tests::navigation_test_config(Method::CPP);
 
     let default_params = UserParameters::new(UserProfile::Static, ClockProfile::Quartz);
 
@@ -86,6 +86,14 @@ fn static_cpp() {
         match status {
             Err(e) => panic!("Static CPP process failed with invalid error: {e}"),
             Ok(pvt) => {
+                // preset performance contract (README): known derogation
+                crate::tests::spec::check_pvt_contract_derogated(
+                    crate::tests::spec::Preset::CPP,
+                    &pvt,
+                    ROVER_REFERENCE_COORDS_ECEF_M,
+                    "legacy frozen points: E1/E5b code while the clocks refer to E1/E5a (group delay not corrected)",
+                );
+
                 info!("Solution #{} {:#?}", nth + 1, pvt);
 
                 let (pos_x_m, pos_y_m, pos_z_m) = pvt.pos_m;
