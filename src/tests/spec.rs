@@ -23,6 +23,20 @@
 //!   and 0.5 ns (1 day) RMS.
 //! - Nominal conditions: static or low dynamics receiver, open sky, GDOP <= 5,
 //!   ionosphere model for SPP, RTK baseline up to 65 km.
+//!
+//! Steady state: the float PPP converges (the ambiguities are estimated as the
+//! geometry changes). Once converged, a tighter contract applies
+//! ([Preset::steady_state_contract], from [PPP_STEADY_STATE_S] for a geodetic
+//! receiver, 30 s sampling, GPS and/or Galileo with precise products):
+//!
+//! | Preset            | max abs(East), abs(North) | max abs(Up) | clock (truth / stability) | max GDOP | max TDOP |
+//! |-------------------|----------|--------|-----------------|-----|---|
+//! | PPP, steady state | 0.10 m   | 0.20 m | 0.5 ns / 10 ns  | 5   | 3 |
+//!
+//! Measured (max over the steady state): simulation 5 cm / 6 cm / 0.3 ns, real data
+//! (ESBC00DNK, 23 h) 7 cm / 15 cm. Not modeled yet: solid earth tides, antenna phase
+//! center offsets and variations, integer ambiguities (PPP-AR): the centimeter level
+//! is the next step.
 use nalgebra::Vector3;
 
 use crate::{
@@ -40,6 +54,10 @@ pub enum Preset {
     RtkCPP,
     RtkPPP,
 }
+
+/// Float PPP: steady state reached after this period (s), for a static geodetic
+/// receiver (30 s sampling, GPS and / or Galileo with precise products).
+pub const PPP_STEADY_STATE_S: f64 = 3600.0;
 
 /// Performance contract of a [Preset]
 #[derive(Debug, Clone, Copy)]
@@ -105,6 +123,24 @@ impl Preset {
                 max_gdop: 5.0,
                 max_tdop: None,
             },
+        }
+    }
+}
+
+impl Preset {
+    /// Contract once the solution has converged (steady state), when the preset
+    /// converges (float PPP), see [PPP_STEADY_STATE_S].
+    pub fn steady_state_contract(&self) -> Option<Contract> {
+        match self {
+            Self::PPP => Some(Contract {
+                max_horizontal_axis_m: 0.10,
+                max_vertical_m: 0.20,
+                max_clock_error_s: Some(0.5E-9),
+                max_clock_jitter_s: Some(10.0E-9),
+                max_gdop: 5.0,
+                max_tdop: Some(3.0),
+            }),
+            _ => None,
         }
     }
 }
@@ -224,6 +260,38 @@ pub fn assert_contract(preset: Preset, report: &RunReport, from_s: f64) {
     );
 }
 
+/// Asserts that every solution of the run obtained at `t_s >= from_s` complies
+/// with the steady state contract of `preset` (see [Preset::steady_state_contract]).
+pub fn assert_steady_state(preset: Preset, report: &RunReport, from_s: f64) {
+    let contract = preset
+        .steady_state_contract()
+        .unwrap_or_else(|| panic!("{preset:?}: no steady state contract"));
+
+    assert!(
+        report
+            .outcomes
+            .iter()
+            .any(|o| o.t_s >= from_s && o.error_enu_m.is_some()),
+        "{}: no steady state solution to check",
+        report.name
+    );
+
+    let violations = contract.report_violations(report, from_s);
+
+    assert!(
+        violations.is_empty(),
+        "{}: {} violation(s) of the {preset:?} steady state contract, first ones:\n{}",
+        report.name,
+        violations.len(),
+        violations
+            .iter()
+            .take(8)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
 /// Asserts that a single [PVTSolution] complies with the contract of `preset`
 /// (truth: ECEF coordinates in meters, clock truth unknown).
 pub fn assert_pvt_contract(preset: Preset, pvt: &PVTSolution, truth_ecef_m: (f64, f64, f64)) {
@@ -269,6 +337,42 @@ pub fn check_pvt_contract_derogated(
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn ppp_steady_state_contract() {
+        let converging = Preset::PPP.contract();
+        let steady = Preset::PPP.steady_state_contract().unwrap();
+
+        // tighter than the convergence contract
+        assert!(steady.max_horizontal_axis_m < converging.max_horizontal_axis_m);
+        assert!(steady.max_vertical_m < converging.max_vertical_m);
+        assert!(steady.max_clock_error_s.unwrap() < converging.max_clock_error_s.unwrap());
+
+        // 15 cm horizontal: compliant while converging, not in steady state
+        let enu = Vector3::new(0.15, 0.0, 0.1);
+        assert!(
+            converging
+                .epoch_violations(&enu, Some(1E-9), 2.0, 1.0)
+                .is_empty()
+        );
+        assert_eq!(steady.epoch_violations(&enu, Some(1E-9), 2.0, 1.0).len(), 2);
+        assert!(
+            steady
+                .epoch_violations(&Vector3::new(0.09, -0.09, 0.19), Some(-0.4E-9), 2.0, 1.0)
+                .is_empty()
+        );
+
+        // only the float PPP converges
+        for preset in [
+            Preset::SPP,
+            Preset::CPP,
+            Preset::RtkSPP,
+            Preset::RtkCPP,
+            Preset::RtkPPP,
+        ] {
+            assert!(preset.steady_state_contract().is_none(), "{preset:?}");
+        }
+    }
 
     #[test]
     fn contract_violations() {

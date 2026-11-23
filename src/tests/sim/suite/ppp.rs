@@ -14,7 +14,7 @@ use crate::{
             ClockModel, CycleSlip, IonoModel, Outage, RunOptions, RunReport, Scenario,
             SimConstellation, Simulator, Station, Technique, Trajectory, TropoModel, run,
         },
-        spec::{Preset, assert_contract},
+        spec::{PPP_STEADY_STATE_S, Preset, assert_contract, assert_steady_state},
     },
 };
 
@@ -87,6 +87,7 @@ fn ppp_ideal_float() {
     check(&report, report.stats().rms_3d_m < 0.01, "3D RMS");
     check(&report, report.clock_rms_ns_from(0.0) < 0.05, "clock");
     assert_contract(Preset::PPP, &report, 0.0);
+    assert_steady_state(Preset::PPP, &report, 0.0);
 }
 
 /// Float PPP, geodetic receiver, Galileo only: classical PPP convergence.
@@ -113,6 +114,7 @@ fn ppp_realistic_galileo_convergence() {
     );
     check(&report, report.clock_rms_ns_from(3600.0) < 0.3, "timing");
     assert_contract(Preset::PPP, &report, CONVERGENCE_S);
+    assert_steady_state(Preset::PPP, &report, PPP_STEADY_STATE_S);
 }
 
 /// GPS + Galileo: twice as many satellites, faster convergence than Galileo only.
@@ -150,6 +152,7 @@ fn ppp_multi_constellation_converges_faster() {
         "3D RMS after 1 h",
     );
     assert_contract(Preset::PPP, &both, CONVERGENCE_S);
+    assert_steady_state(Preset::PPP, &both, PPP_STEADY_STATE_S);
 }
 
 /// After convergence, float PPP is (at least) an order of magnitude better than CPP.
@@ -168,6 +171,7 @@ fn ppp_is_ten_times_better_than_cpp() {
     println!("{}\nCPP 3D RMS after 1 h: {cpp_rms:.3} m", summary(&ppp));
 
     check(&ppp, ppp_rms * 10.0 < cpp_rms, "PPP 10x better than CPP");
+    assert_steady_state(Preset::PPP, &ppp, PPP_STEADY_STATE_S);
 
     // the very first solution is the code (CPP) initialization: same accuracy
     let first = |r: &RunReport| r.outcomes[0].error_3d_m().unwrap();
@@ -206,6 +210,7 @@ fn ppp_rising_and_setting_satellites() {
     check(&report, second_half.rms_3d_m < 0.03, "3D RMS, last 3 h");
     check(&report, second_half.max_3d_m < 0.08, "max 3D, last 3 h");
     assert_contract(Preset::PPP, &report, CONVERGENCE_S);
+    assert_steady_state(Preset::PPP, &report, PPP_STEADY_STATE_S);
 }
 
 /// Cycle slips (on one carrier, both carriers, wide lane neutral, large) after
@@ -278,6 +283,7 @@ fn ppp_cycle_slips() {
     );
     check(&report, after.max_3d_m < 0.05, "no jump at the slips");
     assert_contract(Preset::PPP, &report, CONVERGENCE_S);
+    assert_steady_state(Preset::PPP, &report, PPP_STEADY_STATE_S);
 }
 
 /// Signal outages: short (arc continues) and long (arc restarts), then a
@@ -344,6 +350,7 @@ fn ppp_outages_and_data_gap() {
         report.stats_from(CONVERGENCE_S).rms_3d_m < 0.05,
         "3D RMS",
     );
+    assert_steady_state(Preset::PPP, &report, PPP_STEADY_STATE_S);
 }
 
 /// Unmodeled zenith wet delay (10 cm): estimated, the height is not biased.
@@ -365,6 +372,7 @@ fn ppp_estimates_the_wet_troposphere() {
     check(&report, s.mean_enu_m.2.abs() < 0.04, "no height bias");
     check(&report, s.rms_3d_m < 0.05, "3D RMS after 1 h");
     assert_contract(Preset::PPP, &report, CONVERGENCE_S);
+    assert_steady_state(Preset::PPP, &report, PPP_STEADY_STATE_S);
 }
 
 /// Free running receiver clock (large drift, random walk): estimated as a
@@ -391,6 +399,7 @@ fn ppp_free_running_clock() {
         "3D RMS after 1 h",
     );
     assert_contract(Preset::PPP, &report, CONVERGENCE_S);
+    assert_steady_state(Preset::PPP, &report, PPP_STEADY_STATE_S);
 }
 
 /// Kinematic float PPP (car on a ring road, 20 m/s): the phase tracks the
@@ -434,6 +443,7 @@ fn ppp_kinematic() {
         "kinematic PPP better than kinematic CPP",
     );
     assert_contract(Preset::PPP, &report, 3600.0);
+    assert_steady_state(Preset::PPP, &report, PPP_STEADY_STATE_S);
 }
 
 /// Target (PPP-AR): integer ambiguity resolution requires satellite phase
@@ -478,4 +488,5 @@ fn ppp_gps_only() {
         "GPS only scenario"
     );
     assert_contract(Preset::PPP, &report, CONVERGENCE_S);
+    assert_steady_state(Preset::PPP, &report, PPP_STEADY_STATE_S);
 }

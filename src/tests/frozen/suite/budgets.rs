@@ -20,7 +20,7 @@ use crate::{
     },
     tests::{
         frozen::{Dataset, Replay, replay},
-        spec::Preset,
+        spec::{PPP_STEADY_STATE_S, Preset},
     },
 };
 
@@ -139,6 +139,25 @@ fn check_budgets(dataset: Dataset, method: Method, rtk: bool) {
                 .take(3)
             {
                 failures.push(format!("{}: {preset:?} contract: {violation}", report.name));
+            }
+
+            // steady state (converging presets), on the 24 h dataset. Scope: precise
+            // products only (BeiDou: broadcast orbits and clocks in these data)
+            let precise_products = !budget.constellations.contains(&BeiDou);
+
+            if let (Dataset::Day, Some(steady), true) =
+                (dataset, preset.steady_state_contract(), precise_products)
+            {
+                for violation in steady
+                    .report_violations(&report, PPP_STEADY_STATE_S)
+                    .into_iter()
+                    .take(3)
+                {
+                    failures.push(format!(
+                        "{}: {preset:?} steady state contract: {violation}",
+                        report.name
+                    ));
+                }
             }
         }
 

@@ -213,6 +213,20 @@ in nominal conditions, on simulated data (`src/tests/sim`) and on real data
 | RTK-CPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
 | RTK-PPP  | 0.5 m                | 0.5 m      | not estimated            | 5        | 0 (not estimated)  |
 
+Once converged (steady state), the float PPP must comply with a tighter contract:
+
+| Preset            | max \|East\|, \|North\| | max \|Up\| | Clock: truth / stability | max GDOP | max TDOP |
+|-------------------|----------------------|------------|--------------------------|----------|----------|
+| PPP, steady state | 0.10 m               | 0.20 m     | 0.5 ns / 10 ns           | 5        | 3        |
+
+- Steady state: 1 h after the start (or after a reset) for a static geodetic receiver,
+  30 s sampling, GPS and / or Galileo with precise orbits and clocks.
+- Measured maxima in steady state: 5 cm / 6 cm / 0.3 ns in simulation (static, kinematic,
+  cycle slips, outages, rising and setting satellites), 7 cm / 15 cm on real data
+  (ESBC00DNK, 23 h).
+- Not modeled yet: solid earth tides, antenna phase center offsets and variations,
+  integer ambiguities (PPP-AR). They are the next steps towards the centimeter level.
+
 - Errors are expressed in the local East / North / Up frame: ECEF axes mix horizontal
   and vertical errors depending on the latitude.
 - Clock: error against the truth when it is known (simulation), otherwise stability
